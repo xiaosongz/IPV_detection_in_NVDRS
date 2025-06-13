@@ -2,6 +2,10 @@
 .Rhistory
 .Rapp.history
 
+# cache
+cache/*
+cache_*/*
+
 # Session Data files
 .RData
 .RDataTmp
