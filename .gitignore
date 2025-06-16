@@ -2,6 +2,11 @@
 .Rhistory
 .Rapp.history
 
+#old code
+code/old/*
+
+# r project file
+*.Rproj
 # cache
 cache/*
 cache_*/*
