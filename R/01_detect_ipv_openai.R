@@ -14,7 +14,7 @@ stopifnot(nzchar(key))
 
 # Configuration
 batch_size <- 20  # <<< YOU CAN CHANGE THIS LATER
-cache_dir <- glue("cache_{format(Sys.time(), '%Y%m%d_%H%M%S')}")
+cache_dir <- glue("cache/cache_{format(Sys.time(), '%Y%m%d_%H%M%S')}")
 dir_create(cache_dir)
 
 # Rate limiting: 3 requests per minute
@@ -185,7 +185,7 @@ process_batched <- function(df, col, narrative_type) {
 }
 
 ## ---------- main -----------------------------------------------------------
-df <- read_excel("data/sui_all_flagged.xlsx") |>
+df <- read_excel("data-raw/sui_all_flagged.xlsx") |>
   mutate(row_id = row_number()) |>
   select(row_id, IncidentID, NarrativeCME, NarrativeLE)
 # Process narratives
@@ -205,5 +205,5 @@ results <- bind_rows(results_cme, results_le) |>
   left_join(df, by = c("IncidentID", "row_id"))
 
 # Save results with timestamp
-output_file <- glue("output/ipv_detection_results_batch_{format(Sys.time(), '%Y%m%d_%H%M%S')}.csv")
+output_file <- glue("output/tables/ipv_detection_results_batch_{format(Sys.time(), '%Y%m%d_%H%M%S')}.csv")
 write.csv(results, output_file, row.names = FALSE)

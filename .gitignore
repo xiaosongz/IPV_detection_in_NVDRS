@@ -2,14 +2,14 @@
 .Rhistory
 .Rapp.history
 
-#old code
-code/old/*
+# Environment files
+.env
 
 # r project file
 *.Rproj
-# cache
+# Cache files
 cache/*
-cache_*/*
+!cache/.gitkeep
 
 # Session Data files
 .RData
@@ -49,12 +49,28 @@ Thumbs.db
 .Rprofile
 
 # Data files
+data-raw/*
+!data-raw/.gitkeep
 data/*.csv
 data/*.xlsx
 data/*.xls
 data/*.rds
 data/*.RData
+!data/.gitkeep
 
 # Output files
 output/*
-!output/.gitkeep 
+!output/.gitkeep
+!output/figures/.gitkeep
+!output/tables/.gitkeep
+!output/reports/.gitkeep
+
+# Log files
+logs/*
+!logs/.gitkeep
+!logs/processing/.gitkeep
+!logs/ollama/.gitkeep
+
+# Checkpoint files
+checkpoints/*
+!checkpoints/.gitkeep 
