@@ -11,6 +11,10 @@
 cache/*
 !cache/.gitkeep
 
+# Prompt and response files
+*_prompt.txt
+*_response.txt
+
 # Session Data files
 .RData
 .RDataTmp
