@@ -11,16 +11,21 @@ NULL
 #' @return Parsed LLM response
 #' @export
 send_to_llm <- function(prompt, config) {
-  # Get system prompt from config, with fallback
-  system_prompt <- if (!is.null(config$prompts$system)) {
-    config$prompts$system
-  } else {
-    "You are an expert at analyzing text for intimate partner violence. Respond only with valid JSON."
+  # Require system prompt from config
+  if (is.null(config$prompts) || is.null(config$prompts$system)) {
+    stop("System prompt not found in configuration. Please check inst/settings.yml has a 'prompts:system' section.")
   }
+  system_prompt <- config$prompts$system
   
-  # Get temperature and max_tokens from config, with defaults
-  temperature <- if (!is.null(config$api$temperature)) config$api$temperature else 0.1
-  max_tokens <- if (!is.null(config$api$max_tokens)) config$api$max_tokens else 1000
+  # Require temperature and max_tokens from config
+  if (is.null(config$api$temperature)) {
+    stop("Temperature not found in configuration. Please add 'temperature' to the 'api' section in inst/settings.yml")
+  }
+  if (is.null(config$api$max_tokens)) {
+    stop("Max tokens not found in configuration. Please add 'max_tokens' to the 'api' section in inst/settings.yml")
+  }
+  temperature <- config$api$temperature
+  max_tokens <- config$api$max_tokens
   
   # Build request
   req <- httr2::request(paste0(config$api$base_url, "/chat/completions"))
@@ -70,48 +75,38 @@ send_to_llm <- function(prompt, config) {
 #'
 #' @param narrative Narrative text
 #' @param type "LE" or "CME"
-#' @param config Optional config with prompt templates
+#' @param config Required config object with prompt templates from settings.yml
 #' @return Formatted prompt
 #' @export
 build_prompt <- function(narrative, type = "LE", config = NULL) {
   narrative <- trimws(narrative)
   
-  # If config provided with templates, use them
-  if (!is.null(config) && !is.null(config$prompts)) {
-    template <- if (type == "LE" && !is.null(config$prompts$le_template)) {
-      config$prompts$le_template
-    } else if (type == "CME" && !is.null(config$prompts$cme_template)) {
-      config$prompts$cme_template
-    } else {
-      NULL
-    }
-    
-    if (!is.null(template)) {
-      # Replace {narrative} placeholder with actual narrative
-      # Use fixed = FALSE for proper pattern matching
-      prompt <- gsub("\\{narrative\\}", narrative, template)
-      return(prompt)
-    }
+  # Require config with templates
+  if (is.null(config)) {
+    stop("Configuration required for build_prompt. Please pass the config object loaded from settings.yml")
   }
   
-  # Fallback to default prompts if no config
-  if (type == "LE") {
-    prompt <- glue::glue("
-Analyze this law enforcement narrative for IPV indicators.
-Look for: domestic violence, partners, restraining orders, threats.
-Narrative: '{narrative}'
-Respond with JSON: {{'ipv_detected': bool, 'confidence': 0-1, 
-'indicators': [...], 'rationale': '...'}}
-")
-  } else {
-    prompt <- glue::glue("
-Analyze this medical examiner narrative for IPV indicators.
-Look for: injuries, defensive wounds, strangulation, pattern injuries.
-Narrative: '{narrative}'
-Respond with JSON: {{'ipv_detected': bool, 'confidence': 0-1,
-'indicators': [...], 'rationale': '...'}}
-")
+  if (is.null(config$prompts)) {
+    stop("Prompts section not found in configuration. Please check inst/settings.yml has a 'prompts' section.")
   }
+  
+  # Get the appropriate template
+  if (type == "LE") {
+    if (is.null(config$prompts$le_template)) {
+      stop("LE template not found in configuration. Please add 'le_template' to the 'prompts' section in inst/settings.yml")
+    }
+    template <- config$prompts$le_template
+  } else if (type == "CME") {
+    if (is.null(config$prompts$cme_template)) {
+      stop("CME template not found in configuration. Please add 'cme_template' to the 'prompts' section in inst/settings.yml")
+    }
+    template <- config$prompts$cme_template
+  } else {
+    stop(paste("Invalid narrative type:", type, ". Must be 'LE' or 'CME'"))
+  }
+  
+  # Replace {narrative} placeholder with actual narrative
+  prompt <- gsub("\\{narrative\\}", narrative, template)
   
   return(prompt)
 }
