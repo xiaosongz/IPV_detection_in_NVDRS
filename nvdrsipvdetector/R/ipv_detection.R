@@ -130,8 +130,8 @@ detect_ipv <- function(narrative, type = "LE", config, conn = NULL) {
     ))
   }
   
-  # Build prompt
-  prompt <- build_prompt(narrative, type)
+  # Build prompt with config for templates
+  prompt <- build_prompt(narrative, type, config)
   
   # Send to LLM
   start_time <- Sys.time()

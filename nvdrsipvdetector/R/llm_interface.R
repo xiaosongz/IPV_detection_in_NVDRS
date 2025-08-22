@@ -11,16 +11,27 @@ NULL
 #' @return Parsed LLM response
 #' @export
 send_to_llm <- function(prompt, config) {
+  # Get system prompt from config, with fallback
+  system_prompt <- if (!is.null(config$prompts$system)) {
+    config$prompts$system
+  } else {
+    "You are an expert at analyzing text for intimate partner violence. Respond only with valid JSON."
+  }
+  
+  # Get temperature and max_tokens from config, with defaults
+  temperature <- if (!is.null(config$api$temperature)) config$api$temperature else 0.1
+  max_tokens <- if (!is.null(config$api$max_tokens)) config$api$max_tokens else 1000
+  
   # Build request
   req <- httr2::request(paste0(config$api$base_url, "/chat/completions"))
   req <- httr2::req_body_json(req, list(
     model = config$api$model,
     messages = list(
-      list(role = "system", content = "You are an expert at analyzing text for intimate partner violence. Respond only with valid JSON."),
+      list(role = "system", content = system_prompt),
       list(role = "user", content = prompt)
     ),
-    temperature = 0.1,
-    max_tokens = 1000
+    temperature = temperature,
+    max_tokens = max_tokens
   ))
   
   # Add timeout and retry
@@ -59,44 +70,46 @@ send_to_llm <- function(prompt, config) {
 #'
 #' @param narrative Narrative text
 #' @param type "LE" or "CME"
+#' @param config Optional config with prompt templates
 #' @return Formatted prompt
 #' @export
-build_prompt <- function(narrative, type = "LE") {
+build_prompt <- function(narrative, type = "LE", config = NULL) {
   narrative <- trimws(narrative)
   
+  # If config provided with templates, use them
+  if (!is.null(config) && !is.null(config$prompts)) {
+    template <- if (type == "LE" && !is.null(config$prompts$le_template)) {
+      config$prompts$le_template
+    } else if (type == "CME" && !is.null(config$prompts$cme_template)) {
+      config$prompts$cme_template
+    } else {
+      NULL
+    }
+    
+    if (!is.null(template)) {
+      # Replace {narrative} placeholder with actual narrative
+      # Use fixed = FALSE for proper pattern matching
+      prompt <- gsub("\\{narrative\\}", narrative, template)
+      return(prompt)
+    }
+  }
+  
+  # Fallback to default prompts if no config
   if (type == "LE") {
     prompt <- glue::glue("
-Analyze this law enforcement narrative for intimate partner violence indicators.
-
-Look for: domestic violence, current/former partners, restraining orders, 
-jealousy, control, separation, threats between partners.
-
+Analyze this law enforcement narrative for IPV indicators.
+Look for: domestic violence, partners, restraining orders, threats.
 Narrative: '{narrative}'
-
-Respond with JSON:
-{{
-  'ipv_detected': boolean,
-  'confidence': 0-1,
-  'indicators': [...],
-  'rationale': '...'
-}}
+Respond with JSON: {{'ipv_detected': bool, 'confidence': 0-1, 
+'indicators': [...], 'rationale': '...'}}
 ")
   } else {
     prompt <- glue::glue("
-Analyze this medical examiner narrative for intimate partner violence indicators.
-
-Look for: multiple injuries in various stages, defensive wounds, 
-strangulation, pattern injuries, history of prior injuries.
-
+Analyze this medical examiner narrative for IPV indicators.
+Look for: injuries, defensive wounds, strangulation, pattern injuries.
 Narrative: '{narrative}'
-
-Respond with JSON:
-{{
-  'ipv_detected': boolean,
-  'confidence': 0-1,
-  'indicators': [...],
-  'rationale': '...'
-}}
+Respond with JSON: {{'ipv_detected': bool, 'confidence': 0-1,
+'indicators': [...], 'rationale': '...'}}
 ")
   }
   
