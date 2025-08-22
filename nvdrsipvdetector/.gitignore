@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+logs/
+inst/extdata/*.sqlite
+inst/extdata/*.db
+data-raw/*.csv
+data-raw/*.xlsx
+config/*.yml
+!config/config.yml.example
+.DS_Store
+.env
+*.log
