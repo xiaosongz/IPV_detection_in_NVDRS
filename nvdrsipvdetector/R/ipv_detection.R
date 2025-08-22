@@ -69,9 +69,23 @@ log_api_request <- function(conn, incident_id, prompt_type, prompt_text,
 #' @param config_path Path to settings.yml
 #' @return Configuration list
 #' @export
-load_config <- function(config_path = "config/settings.yml") {
+load_config <- function(config_path = NULL) {
+  # If no path provided, try to find settings.yml
+  if (is.null(config_path)) {
+    # First try package installation location
+    config_path <- system.file("settings.yml", package = "nvdrsipvdetector")
+    
+    # If not installed, try development location
+    if (config_path == "") {
+      config_path <- "inst/settings.yml"
+      if (!file.exists(config_path)) {
+        config_path <- "nvdrsipvdetector/inst/settings.yml"
+      }
+    }
+  }
+  
   if (!file.exists(config_path)) {
-    stop("Configuration file not found: ", config_path)
+    stop("Configuration file not found. Tried: ", config_path)
   }
   
   # Read and parse YAML
@@ -143,7 +157,7 @@ detect_ipv <- function(narrative, type = "LE", config, conn = NULL) {
 #' \dontrun{
 #' results <- nvdrs_process_batch("data.csv", "config.yml")
 #' }
-nvdrs_process_batch <- function(data, config = "config/settings.yml", validate = FALSE) {
+nvdrs_process_batch <- function(data, config = NULL, validate = FALSE) {
   # Load config if path provided
   if (is.character(config)) {
     config <- load_config(config)

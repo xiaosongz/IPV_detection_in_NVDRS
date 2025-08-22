@@ -48,9 +48,9 @@ Sys.setenv(LM_STUDIO_URL = "http://192.168.10.22:1234/v1")
 Sys.setenv(LLM_MODEL = "openai/gpt-oss-120b")
 ```
 
-### 3. Edit Configuration File
+### 3. Configuration File Location
 
-The package uses `config/settings.yml` for configuration:
+The package settings are stored in `inst/settings.yml`:
 ```yaml
 api:
   base_url: "${LM_STUDIO_URL:-http://192.168.10.22:1234/v1}"
@@ -63,6 +63,8 @@ processing:
   checkpoint_every: 100
 ```
 
+The package automatically finds this file when installed.
+
 ## 📖 Usage Examples
 
 ### Basic Usage
@@ -74,10 +76,8 @@ library(nvdrsipvdetector)
 data <- read_nvdrs_data("path/to/your/data.csv")
 
 # Process narratives for IPV detection
-results <- nvdrs_process_batch(
-  data = data,
-  config_file = "config/settings.yml"
-)
+# Config is loaded automatically from inst/settings.yml
+results <- nvdrs_process_batch(data = data)
 
 # Export results
 export_results(results, "output/ipv_results.csv", format = "csv")

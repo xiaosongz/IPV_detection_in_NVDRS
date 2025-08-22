@@ -11,16 +11,8 @@
 #' result <- detect_ipv_simple("Domestic violence incident", "LE")
 #' }
 detect_ipv_simple <- function(narrative, narrative_type = "LE", log_to_db = TRUE) {
-  # Load config from default location
-  config_path <- system.file("settings.yml", package = "nvdrsipvdetector")
-  if (config_path == "") {
-    config_path <- "nvdrsipvdetector/config/settings.yml"
-  }
-  if (!file.exists(config_path)) {
-    config_path <- "config/settings.yml"
-  }
-  
-  config <- load_config(config_path)
+  # Load config using the updated load_config function which handles paths automatically
+  config <- load_config()
   
   # Initialize database connection if logging
   conn <- NULL
