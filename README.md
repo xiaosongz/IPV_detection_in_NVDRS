@@ -9,6 +9,7 @@ An R package for detecting intimate partner violence (IPV) indicators in Nationa
 - **API Integration**: ✅ Working with LM Studio
 - **Accuracy**: 70% on test sample (289 records available for validation)
 - **Performance**: ~38,000 records/second theoretical throughput
+- **Logging**: ✅ SQLite database created at `logs/api_logs.sqlite`
 
 ### Test Results Summary
 - **R CMD Check**: ✅ 0 errors, 0 warnings, 0 notes
@@ -80,6 +81,9 @@ results <- nvdrs_process_batch(
 
 # Export results
 export_results(results, "output/ipv_results.csv", format = "csv")
+
+# Check logs - API calls are automatically logged to SQLite
+# Database location: logs/api_logs.sqlite
 ```
 
 ### Step-by-Step Processing
@@ -167,6 +171,43 @@ if ("ipv_flag_LE" %in% names(data_with_flags)) {
   
   print_validation_report(validation)
 }
+```
+
+### Viewing API Logs
+
+```r
+# The package automatically logs all API calls to SQLite database
+# Default location: logs/api_logs.sqlite
+
+# View logs using DBI
+library(DBI)
+conn <- dbConnect(RSQLite::SQLite(), "logs/api_logs.sqlite")
+
+# Check total API calls
+total_calls <- dbGetQuery(conn, "SELECT COUNT(*) as count FROM api_logs")
+print(paste("Total API calls:", total_calls$count))
+
+# View recent logs
+recent_logs <- dbGetQuery(conn, "
+  SELECT incident_id, prompt_type, response_time_ms, 
+         datetime(timestamp, 'unixepoch') as call_time
+  FROM api_logs 
+  ORDER BY timestamp DESC 
+  LIMIT 10
+")
+print(recent_logs)
+
+# Check average response times
+avg_times <- dbGetQuery(conn, "
+  SELECT prompt_type, 
+         AVG(response_time_ms) as avg_ms,
+         COUNT(*) as total_calls
+  FROM api_logs 
+  GROUP BY prompt_type
+")
+print(avg_times)
+
+dbDisconnect(conn)
 ```
 
 ### Testing the LLM Connection
