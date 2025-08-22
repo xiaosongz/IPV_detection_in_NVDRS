@@ -7,10 +7,10 @@
 validate_input_data(data)
 }
 \arguments{
-\item{data}{Data frame to validate}
+\item{data}{Tibble to validate}
 }
 \value{
-Validated data frame
+Validated tibble
 }
 \description{
 Validate Input Data

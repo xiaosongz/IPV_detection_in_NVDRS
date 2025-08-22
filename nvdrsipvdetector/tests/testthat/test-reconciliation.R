@@ -3,7 +3,7 @@ test_that("reconcile_le_cme handles both results", {
   cme_result <- list(ipv_detected = FALSE, confidence = 0.3)
   weights <- list(le = 0.4, cme = 0.6, threshold = 0.5)
   
-  result <- reconcile_le_cme(le_result, cme_result, weights)
+  result <- reconcile_le_cme(le_result, cme_result, weights, threshold = weights$threshold)
   
   expected_confidence <- 0.8 * 0.4 + 0.3 * 0.6
   expect_equal(result$confidence, expected_confidence)
@@ -15,7 +15,7 @@ test_that("reconcile_le_cme handles missing LE", {
   cme_result <- list(ipv_detected = TRUE, confidence = 0.9)
   weights <- list(le = 0.4, cme = 0.6, threshold = 0.5)
   
-  result <- reconcile_le_cme(le_result, cme_result, weights)
+  result <- reconcile_le_cme(le_result, cme_result, weights, threshold = weights$threshold)
   expect_equal(result$ipv_detected, TRUE)
   expect_equal(result$confidence, 0.9)
 })

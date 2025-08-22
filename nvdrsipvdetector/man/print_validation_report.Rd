@@ -2,13 +2,13 @@
 % Please edit documentation in R/validation.R
 \name{print_validation_report}
 \alias{print_validation_report}
-\title{Print Validation Report}
+\title{Print Validation Report (Modernized)}
 \usage{
 print_validation_report(metrics)
 }
 \arguments{
-\item{metrics}{Metrics list from calculate_metrics}
+\item{metrics}{Metrics tibble from calculate_metrics}
 }
 \description{
-Print Validation Report
+Print Validation Report (Modernized)
 }

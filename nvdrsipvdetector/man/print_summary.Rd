@@ -2,13 +2,13 @@
 % Please edit documentation in R/output.R
 \name{print_summary}
 \alias{print_summary}
-\title{Print Summary}
+\title{Print Summary (Modernized)}
 \usage{
 print_summary(results)
 }
 \arguments{
-\item{results}{Data frame with results}
+\item{results}{Tibble with results}
 }
 \description{
-Print Summary
+Print Summary (Modernized)
 }

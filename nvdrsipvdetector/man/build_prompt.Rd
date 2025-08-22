@@ -2,7 +2,7 @@
 % Please edit documentation in R/llm_interface.R
 \name{build_prompt}
 \alias{build_prompt}
-\title{Build Prompt}
+\title{Build Prompt (Modernized)}
 \usage{
 build_prompt(narrative, type = "LE", config = NULL)
 }
@@ -17,5 +17,5 @@ build_prompt(narrative, type = "LE", config = NULL)
 Formatted prompt
 }
 \description{
-Build Prompt
+Build Prompt (Modernized)
 }

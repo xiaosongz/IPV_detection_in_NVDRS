@@ -2,7 +2,7 @@
 % Please edit documentation in R/detect_ipv_simple.R
 \name{detect_ipv_simple}
 \alias{detect_ipv_simple}
-\title{Simple IPV Detection Wrapper}
+\title{Simple IPV Detection Wrapper (Deprecated)}
 \usage{
 detect_ipv_simple(narrative, narrative_type = "LE", log_to_db = TRUE)
 }
@@ -17,10 +17,15 @@ detect_ipv_simple(narrative, narrative_type = "LE", log_to_db = TRUE)
 List with ipv_detected, confidence, indicators, and rationale
 }
 \description{
-Simplified function that handles config and database automatically
+This function is deprecated. Please use \code{\link{detect_ipv}} instead,
+which now handles configuration and database connections automatically.
 }
 \examples{
 \dontrun{
+# Old way (deprecated):
 result <- detect_ipv_simple("Domestic violence incident", "LE")
+
+# New way (recommended):
+result <- detect_ipv("Domestic violence incident", type = "LE")
 }
 }

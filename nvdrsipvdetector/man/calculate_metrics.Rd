@@ -2,18 +2,18 @@
 % Please edit documentation in R/validation.R
 \name{calculate_metrics}
 \alias{calculate_metrics}
-\title{Calculate Metrics}
+\title{Calculate Metrics (Modernized)}
 \usage{
 calculate_metrics(predictions, actual = NULL)
 }
 \arguments{
 \item{predictions}{Data frame with ipv_detected column}
 
-\item{actual}{Data frame with ManualIPVFlag column}
+\item{actual}{Data frame with ManualIPVFlag column or NULL}
 }
 \value{
-List with metrics
+Tibble with metrics
 }
 \description{
-Calculate Metrics
+Calculate Metrics (Modernized)
 }

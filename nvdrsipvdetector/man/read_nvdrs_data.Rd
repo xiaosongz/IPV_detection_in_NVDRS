@@ -10,7 +10,7 @@ read_nvdrs_data(file_path)
 \item{file_path}{Path to CSV file}
 }
 \value{
-Data frame with narratives
+Tibble with narratives
 }
 \description{
 Read NVDRS Data

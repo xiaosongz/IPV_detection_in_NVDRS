@@ -217,129 +217,124 @@ nvdrs_process_batch <- function(data, config = NULL, validate = FALSE) {
     data <- validate_input_data(data)
   }
   
+  # Convert to tibble
+  data <- tibble::as_tibble(data)
+  
   # Initialize database
   conn <- init_database(config$database$path)
   on.exit(DBI::dbDisconnect(conn))
   
-  # Process in batches
-  batches <- split_into_batches(data, config$processing$batch_size)
-  results <- vector("list", length(batches))
+  # Split data into batches
+  data_with_batch <- data %>%
+    dplyr::mutate(
+      batch_id = ceiling(dplyr::row_number() / config$processing$batch_size)
+    )
+  
+  batches <- data_with_batch %>%
+    dplyr::group_split(batch_id)
   
   pb <- cli::cli_progress_bar("Processing", total = nrow(data))
   
-  for (i in seq_along(batches)) {
-    batch <- batches[[i]]
-    batch_results <- batch
-    
-    # Process each record
-    for (j in seq_len(nrow(batch))) {
-      # LE narrative
-      if (!is.na(batch$NarrativeLE[j])) {
-        le_result <- detect_ipv(batch$NarrativeLE[j], "LE", config, conn)
-        batch_results$le_ipv[j] <- le_result$ipv_detected
-        batch_results$le_confidence[j] <- le_result$confidence
-      } else {
-        batch_results$le_ipv[j] <- NA
-        batch_results$le_confidence[j] <- NA
-      }
-      
-      # CME narrative
-      if (!is.na(batch$NarrativeCME[j])) {
-        cme_result <- detect_ipv(batch$NarrativeCME[j], "CME", config, conn)
-        batch_results$cme_ipv[j] <- cme_result$ipv_detected
-        batch_results$cme_confidence[j] <- cme_result$confidence
-      } else {
-        batch_results$cme_ipv[j] <- NA
-        batch_results$cme_confidence[j] <- NA
-      }
-      
-      cli::cli_progress_update(inc = 1, id = pb)
-    }
-    
-    results[[i]] <- batch_results
-    
-    # Checkpoint every N records
-    if ((i * config$processing$batch_size) %% config$processing$checkpoint_every == 0) {
-      saveRDS(do.call(rbind, results), paste0("checkpoint_", Sys.Date(), ".rds"))
-    }
-  }
+  # Process batches using purrr::map
+  batch_results <- purrr::map(
+    batches, 
+    ~ process_single_batch(.x, config, conn, pb)
+  )
   
-  # Combine results
-  final_results <- do.call(rbind, results)
+  # Combine all batch results
+  final_results <- dplyr::bind_rows(batch_results)
   
-  # Reconcile LE and CME
-  final_results <- reconcile_results(final_results, config)
+  # Reconcile LE and CME using modernized function
+  final_results <- reconcile_batch_results(final_results, config)
   
   # Validate if requested
   if (validate && "ManualIPVFlag" %in% names(final_results)) {
-    validation <- validate_results(final_results)
-    print(validation)
+    validation <- calculate_metrics(final_results)
+    print_validation_report(validation)
   }
   
   return(final_results)
 }
 
-#' Reconcile LE and CME Results
+#' Process Single Batch (Helper Function)
 #'
-#' @param results Data frame with le_ipv and cme_ipv columns
-#' @param config Configuration with weights
-#' @return Data frame with reconciled results
-reconcile_results <- function(results, config) {
-  for (i in seq_len(nrow(results))) {
-    # Get weights
-    le_weight <- config$weights$le
-    cme_weight <- config$weights$cme
+#' @param batch Batch of data to process
+#' @param config Configuration object
+#' @param conn Database connection
+#' @param pb Progress bar
+#' @return Processed batch with results
+process_single_batch <- function(batch, config, conn, pb) {
+  result <- batch %>%
+    dplyr::mutate(
+      le_result = purrr::map(
+        NarrativeLE, 
+        ~ process_narrative(.x, "LE", config, conn)
+      ),
+      cme_result = purrr::map(
+        NarrativeCME, 
+        ~ process_narrative(.x, "CME", config, conn)
+      ),
+      le_ipv = purrr::map_lgl(
+        le_result, 
+        ~ .x$ipv_detected %||% NA
+      ),
+      le_confidence = purrr::map_dbl(
+        le_result, 
+        ~ .x$confidence %||% NA
+      ),
+      cme_ipv = purrr::map_lgl(
+        cme_result, 
+        ~ .x$ipv_detected %||% NA
+      ),
+      cme_confidence = purrr::map_dbl(
+        cme_result, 
+        ~ .x$confidence %||% NA
+      )
+    ) %>%
+    dplyr::select(-le_result, -cme_result)
     
-    # Handle missing values
-    if (is.na(results$le_ipv[i]) && is.na(results$cme_ipv[i])) {
-      results$ipv_detected[i] <- NA
-      results$confidence[i] <- NA
-    } else if (is.na(results$le_ipv[i])) {
-      results$ipv_detected[i] <- results$cme_ipv[i]
-      results$confidence[i] <- results$cme_confidence[i]
-    } else if (is.na(results$cme_ipv[i])) {
-      results$ipv_detected[i] <- results$le_ipv[i]
-      results$confidence[i] <- results$le_confidence[i]
-    } else {
-      # Weighted average
-      results$confidence[i] <- results$le_confidence[i] * le_weight + 
-                               results$cme_confidence[i] * cme_weight
-      results$ipv_detected[i] <- results$confidence[i] >= config$weights$threshold
-    }
-  }
+  # Update progress bar for each record
+  cli::cli_progress_update(inc = nrow(result), id = pb)
   
-  return(results)
+  return(result)
 }
 
-#' Validate Results
+#' Process Single Narrative (Helper Function)
 #'
-#' @param results Data frame with predictions and ManualIPVFlag
-#' @return Validation metrics
-validate_results <- function(results) {
-  # Remove NA values
-  valid <- results[!is.na(results$ipv_detected) & !is.na(results$ManualIPVFlag), ]
+#' @param narrative Single narrative text
+#' @param type "LE" or "CME"
+#' @param config Configuration object
+#' @param conn Database connection
+#' @return Detection result
+process_narrative <- function(narrative, type, config, conn) {
+  if (is.na(narrative)) {
+    return(list(ipv_detected = NA, confidence = NA))
+  }
   
-  # Calculate metrics
-  tp <- sum(valid$ipv_detected & valid$ManualIPVFlag)
-  tn <- sum(!valid$ipv_detected & !valid$ManualIPVFlag)
-  fp <- sum(valid$ipv_detected & !valid$ManualIPVFlag)
-  fn <- sum(!valid$ipv_detected & valid$ManualIPVFlag)
-  
-  accuracy <- (tp + tn) / nrow(valid)
-  precision <- if (tp + fp > 0) tp / (tp + fp) else NA
-  recall <- if (tp + fn > 0) tp / (tp + fn) else NA
-  f1 <- if (!is.na(precision) && !is.na(recall)) {
-    2 * (precision * recall) / (precision + recall)
-  } else NA
-  
-  list(
-    n = nrow(valid),
-    accuracy = accuracy,
-    precision = precision,
-    recall = recall,
-    f1_score = f1,
-    confusion_matrix = matrix(c(tn, fp, fn, tp), nrow = 2,
-                             dimnames = list(Predicted = c("No", "Yes"),
-                                           Actual = c("No", "Yes")))
-  )
+  detect_ipv(narrative, type, config, conn, log_to_db = TRUE)
 }
+
+#' Reconcile Batch Results (Modernized)
+#'
+#' @param results Tibble with le_ipv and cme_ipv columns
+#' @param config Configuration with weights
+#' @return Tibble with reconciled results
+reconcile_batch_results <- function(results, config) {
+  results %>%
+    dplyr::mutate(
+      confidence = dplyr::case_when(
+        is.na(le_ipv) & is.na(cme_ipv) ~ NA_real_,
+        is.na(le_ipv) ~ cme_confidence,
+        is.na(cme_ipv) ~ le_confidence,
+        TRUE ~ le_confidence * config$weights$le + 
+                cme_confidence * config$weights$cme
+      ),
+      ipv_detected = dplyr::case_when(
+        is.na(le_ipv) & is.na(cme_ipv) ~ NA,
+        is.na(le_ipv) ~ cme_ipv,
+        is.na(cme_ipv) ~ le_ipv,
+        TRUE ~ confidence >= config$weights$threshold
+      )
+    )
+}
+

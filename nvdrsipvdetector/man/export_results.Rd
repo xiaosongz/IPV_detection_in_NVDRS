@@ -2,17 +2,17 @@
 % Please edit documentation in R/output.R
 \name{export_results}
 \alias{export_results}
-\title{Export Results}
+\title{Export Results (Modernized)}
 \usage{
 export_results(results, file_path, format = "csv")
 }
 \arguments{
-\item{results}{Data frame with detection results}
+\item{results}{Tibble with detection results}
 
 \item{file_path}{Path to output file}
 
 \item{format}{Output format ("csv", "rds", "json")}
 }
 \description{
-Export Results
+Export Results (Modernized)
 }

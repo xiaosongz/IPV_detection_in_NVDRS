@@ -4,20 +4,46 @@
 \alias{detect_ipv}
 \title{Detect IPV in Narrative}
 \usage{
-detect_ipv(narrative, type = "LE", config, conn = NULL)
+detect_ipv(
+  narrative,
+  type = "LE",
+  config = NULL,
+  conn = NULL,
+  log_to_db = TRUE
+)
 }
 \arguments{
-\item{narrative}{Narrative text}
+\item{narrative}{Narrative text to analyze}
 
-\item{type}{"LE" or "CME"}
+\item{type}{"LE" for law enforcement or "CME" for medical examiner}
 
-\item{config}{Configuration}
+\item{config}{Configuration object, path to config file, or NULL (uses default)}
 
-\item{conn}{Database connection}
+\item{conn}{Database connection or NULL (auto-creates if logging enabled)}
+
+\item{log_to_db}{Whether to log API calls to database (default TRUE)}
 }
 \value{
-Detection result
+List with ipv_detected, confidence, indicators, and rationale
 }
 \description{
-Detect IPV in Narrative
+Main function for detecting intimate partner violence in narratives.
+Automatically handles configuration and database connections.
+}
+\examples{
+\dontrun{
+# Simple usage - everything automatic
+result <- detect_ipv("Domestic violence incident")
+
+# Specify narrative type
+result <- detect_ipv("Victim injuries", type = "CME")
+
+# Use custom config file
+result <- detect_ipv("Narrative text", config = "custom_config.yml")
+
+# Advanced usage with explicit config and connection
+my_config <- load_config("my_settings.yml")
+my_conn <- init_database("my_logs.sqlite")
+result <- detect_ipv("Narrative", config = my_config, conn = my_conn)
+}
 }

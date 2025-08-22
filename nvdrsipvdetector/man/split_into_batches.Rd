@@ -7,12 +7,12 @@
 split_into_batches(data, batch_size = 50)
 }
 \arguments{
-\item{data}{Data frame}
+\item{data}{Tibble to split}
 
 \item{batch_size}{Size of each batch}
 }
 \value{
-List of data frames
+List of tibbles
 }
 \description{
 Split Data into Batches

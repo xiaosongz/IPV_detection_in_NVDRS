@@ -4,14 +4,16 @@
 \alias{reconcile_le_cme}
 \title{Reconcile LE and CME}
 \usage{
-reconcile_le_cme(le_result, cme_result, weights)
+reconcile_le_cme(le_result, cme_result, weights, threshold = 0.7)
 }
 \arguments{
 \item{le_result}{LE detection result}
 
 \item{cme_result}{CME detection result}
 
-\item{weights}{List with le, cme, and threshold values}
+\item{weights}{List with le and cme weight values}
+
+\item{threshold}{Decision threshold (default 0.7)}
 }
 \value{
 Reconciled result

@@ -2,7 +2,7 @@
 % Please edit documentation in R/llm_interface.R
 \name{send_to_llm}
 \alias{send_to_llm}
-\title{Send to LLM}
+\title{Send to LLM (Modernized with Functional Error Handling)}
 \usage{
 send_to_llm(prompt, config)
 }
@@ -15,5 +15,5 @@ send_to_llm(prompt, config)
 Parsed LLM response
 }
 \description{
-Send to LLM
+Send to LLM (Modernized with Functional Error Handling)
 }

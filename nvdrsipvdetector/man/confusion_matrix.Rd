@@ -2,18 +2,18 @@
 % Please edit documentation in R/validation.R
 \name{confusion_matrix}
 \alias{confusion_matrix}
-\title{Generate Confusion Matrix}
+\title{Generate Confusion Matrix (Modernized)}
 \usage{
 confusion_matrix(predictions, actual)
 }
 \arguments{
-\item{predictions}{Predictions vector}
+\item{predictions}{Predictions vector or data frame}
 
-\item{actual}{Actual values vector}
+\item{actual}{Actual values vector or data frame}
 }
 \value{
-Confusion matrix
+Confusion matrix as tibble
 }
 \description{
-Generate Confusion Matrix
+Generate Confusion Matrix (Modernized)
 }

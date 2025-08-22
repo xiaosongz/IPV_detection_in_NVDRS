@@ -2,16 +2,16 @@
 % Please edit documentation in R/reconciliation.R
 \name{calculate_agreement}
 \alias{calculate_agreement}
-\title{Calculate Agreement}
+\title{Calculate Agreement (Modernized)}
 \usage{
 calculate_agreement(results)
 }
 \arguments{
-\item{results}{Data frame with le_ipv and cme_ipv columns}
+\item{results}{Tibble with le_ipv and cme_ipv columns}
 }
 \value{
-Agreement statistics
+Agreement statistics tibble
 }
 \description{
-Calculate Agreement
+Calculate Agreement (Modernized)
 }

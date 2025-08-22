@@ -4,94 +4,150 @@
 #' @keywords internal
 NULL
 
-#' Calculate Metrics
+#' Calculate Metrics (Modernized)
 #'
 #' @param predictions Data frame with ipv_detected column
-#' @param actual Data frame with ManualIPVFlag column
-#' @return List with metrics
+#' @param actual Data frame with ManualIPVFlag column or NULL
+#' @return Tibble with metrics
 #' @export
 calculate_metrics <- function(predictions, actual = NULL) {
-  # If actual is NULL, look for ManualIPVFlag in predictions
-  if (is.null(actual)) {
-    if (!"ManualIPVFlag" %in% names(predictions)) {
+  # Prepare data as tibble
+  data <- tibble::as_tibble(predictions)
+  
+  # Extract actual values
+  actual_col <- if (is.null(actual)) {
+    if (!"ManualIPVFlag" %in% names(data)) {
       stop("No manual flags provided for validation")
     }
-    actual <- predictions$ManualIPVFlag
+    data$ManualIPVFlag
   } else if (is.data.frame(actual)) {
-    actual <- actual$ManualIPVFlag
+    actual$ManualIPVFlag
+  } else {
+    actual
   }
   
-  pred <- predictions$ipv_detected
+  # Create analysis dataset
+  analysis_data <- tibble::tibble(
+    predicted = data$ipv_detected,
+    actual = actual_col
+  ) %>%
+    dplyr::filter(!is.na(predicted) & !is.na(actual))
   
-  # Remove NA values
-  valid_idx <- !is.na(pred) & !is.na(actual)
-  pred <- pred[valid_idx]
-  actual <- actual[valid_idx]
-  
-  if (length(pred) == 0) {
-    return(list(n = 0, error = "No valid predictions"))
+  if (nrow(analysis_data) == 0) {
+    return(tibble::tibble(
+      n = 0L,
+      error = "No valid predictions"
+    ))
   }
   
-  # Calculate confusion matrix
-  tp <- sum(pred & actual)
-  tn <- sum(!pred & !actual)
-  fp <- sum(pred & !actual)
-  fn <- sum(!pred & actual)
-  
-  # Calculate metrics
-  accuracy <- (tp + tn) / length(pred)
-  precision <- if (tp + fp > 0) tp / (tp + fp) else NA
-  recall <- if (tp + fn > 0) tp / (tp + fn) else NA
-  f1 <- if (!is.na(precision) && !is.na(recall) && (precision + recall) > 0) {
-    2 * (precision * recall) / (precision + recall)
-  } else NA
-  
-  return(list(
-    n = length(pred),
-    accuracy = accuracy,
-    precision = precision,
-    recall = recall,
-    f1_score = f1,
-    true_positive = tp,
-    true_negative = tn,
-    false_positive = fp,
-    false_negative = fn
-  ))
+  # Calculate all metrics using dplyr::summarise
+  analysis_data %>%
+    dplyr::summarise(
+      n = dplyr::n(),
+      true_positive = sum(predicted & actual),
+      true_negative = sum(!predicted & !actual),
+      false_positive = sum(predicted & !actual),
+      false_negative = sum(!predicted & actual),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      accuracy = (true_positive + true_negative) / n,
+      precision = dplyr::case_when(
+        (true_positive + false_positive) > 0 ~ 
+          true_positive / (true_positive + false_positive),
+        TRUE ~ NA_real_
+      ),
+      recall = dplyr::case_when(
+        (true_positive + false_negative) > 0 ~ 
+          true_positive / (true_positive + false_negative),
+        TRUE ~ NA_real_
+      ),
+      f1_score = dplyr::case_when(
+        !is.na(precision) & !is.na(recall) & (precision + recall) > 0 ~
+          2 * (precision * recall) / (precision + recall),
+        TRUE ~ NA_real_
+      )
+    )
 }
 
-#' Generate Confusion Matrix
+#' Generate Confusion Matrix (Modernized)
 #'
-#' @param predictions Predictions vector
-#' @param actual Actual values vector
-#' @return Confusion matrix
+#' @param predictions Predictions vector or data frame
+#' @param actual Actual values vector or data frame
+#' @return Confusion matrix as tibble
 #' @export
 confusion_matrix <- function(predictions, actual) {
-  # Handle data frames
-  if (is.data.frame(predictions)) predictions <- predictions$ipv_detected
-  if (is.data.frame(actual)) actual <- actual$ManualIPVFlag
+  # Extract vectors from data frames if needed
+  pred_vec <- if (is.data.frame(predictions)) {
+    predictions$ipv_detected
+  } else {
+    predictions
+  }
   
-  # Remove NAs
-  valid <- !is.na(predictions) & !is.na(actual)
-  predictions <- predictions[valid]
-  actual <- actual[valid]
+  actual_vec <- if (is.data.frame(actual)) {
+    actual$ManualIPVFlag
+  } else {
+    actual
+  }
   
-  # Create matrix
-  cm <- table(Predicted = predictions, Actual = actual)
-  return(cm)
+  # Create analysis tibble and generate confusion matrix
+  tibble::tibble(
+    predicted = pred_vec,
+    actual = actual_vec
+  ) %>%
+    dplyr::filter(!is.na(predicted) & !is.na(actual)) %>%
+    dplyr::count(predicted, actual, name = "count") %>%
+    tidyr::pivot_wider(
+      names_from = actual,
+      values_from = count,
+      values_fill = 0L,
+      names_prefix = "actual_"
+    )
 }
 
-#' Print Validation Report
+#' Print Validation Report (Modernized)
 #'
-#' @param metrics Metrics list from calculate_metrics
+#' @param metrics Metrics tibble from calculate_metrics
 #' @export
 print_validation_report <- function(metrics) {
-  cat("\n=== IPV Detection Validation Report ===\n")
-  cat(sprintf("Total samples: %d\n", metrics$n))
-  cat(sprintf("Accuracy: %.2f%%\n", metrics$accuracy * 100))
-  cat(sprintf("Precision: %.2f%%\n", metrics$precision * 100))
-  cat(sprintf("Recall: %.2f%%\n", metrics$recall * 100))
-  cat(sprintf("F1 Score: %.3f\n", metrics$f1_score))
-  cat("\nConfusion Matrix:\n")
-  cat(sprintf("  TP: %d  FP: %d\n", metrics$true_positive, metrics$false_positive))
-  cat(sprintf("  FN: %d  TN: %d\n", metrics$false_negative, metrics$true_negative))
+  # Handle error case
+  if ("error" %in% names(metrics)) {
+    cli::cli_alert_danger("Validation error: {metrics$error}")
+    return(invisible(NULL))
+  }
+  
+  # Use cli for better formatting
+  cli::cli_h1("IPV Detection Validation Report")
+  
+  # Basic metrics
+  cli::cli_alert_info("Total samples: {metrics$n}")
+  
+  if (!is.na(metrics$accuracy)) {
+    cli::cli_alert_success(
+      "Accuracy: {scales::percent(metrics$accuracy, accuracy = 0.01)}"
+    )
+  }
+  
+  if (!is.na(metrics$precision)) {
+    cli::cli_alert_info(
+      "Precision: {scales::percent(metrics$precision, accuracy = 0.01)}"
+    )
+  }
+  
+  if (!is.na(metrics$recall)) {
+    cli::cli_alert_info(
+      "Recall: {scales::percent(metrics$recall, accuracy = 0.01)}"
+    )
+  }
+  
+  if (!is.na(metrics$f1_score)) {
+    cli::cli_alert_info("F1 Score: {round(metrics$f1_score, 3)}")
+  }
+  
+  # Confusion matrix
+  cli::cli_h2("Confusion Matrix")
+  cli::cli_text("  TP: {metrics$true_positive}  FP: {metrics$false_positive}")
+  cli::cli_text("  FN: {metrics$false_negative}  TN: {metrics$true_negative}")
+  
+  invisible(metrics)
 }
