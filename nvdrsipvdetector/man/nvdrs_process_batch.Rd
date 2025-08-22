@@ -4,7 +4,7 @@
 \alias{nvdrs_process_batch}
 \title{Process NVDRS Batch}
 \usage{
-nvdrs_process_batch(data, config = "config/settings.yml", validate = FALSE)
+nvdrs_process_batch(data, config = NULL, validate = FALSE)
 }
 \arguments{
 \item{data}{Tibble with columns: IncidentID, NarrativeLE, NarrativeCME}

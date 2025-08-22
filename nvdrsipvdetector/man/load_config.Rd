@@ -4,7 +4,7 @@
 \alias{load_config}
 \title{Load Configuration}
 \usage{
-load_config(config_path = "config/settings.yml")
+load_config(config_path = NULL)
 }
 \arguments{
 \item{config_path}{Path to settings.yml}

@@ -4,12 +4,14 @@
 \alias{build_prompt}
 \title{Build Prompt}
 \usage{
-build_prompt(narrative, type = "LE")
+build_prompt(narrative, type = "LE", config = NULL)
 }
 \arguments{
 \item{narrative}{Narrative text}
 
 \item{type}{"LE" or "CME"}
+
+\item{config}{Required config object with prompt templates from settings.yml}
 }
 \value{
 Formatted prompt

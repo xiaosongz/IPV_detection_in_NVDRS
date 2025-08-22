@@ -72,55 +72,57 @@ The package automatically finds this file when installed.
 ```r
 library(nvdrsipvdetector)
 
-# Load and process NVDRS data
-data <- read_nvdrs_data("path/to/your/data.csv")
+# Simple usage - everything automatic
+result <- detect_ipv("Domestic violence incident")
 
-# Process narratives for IPV detection
-# Config is loaded automatically from inst/settings.yml
+# Specify narrative type (LE or CME)
+result <- detect_ipv("Victim injuries", type = "CME")
+
+# Disable logging
+result <- detect_ipv("Narrative text", log_to_db = FALSE)
+
+# Use custom config file
+result <- detect_ipv("Narrative", config = "custom_settings.yml")
+
+# Batch processing
+data <- read_nvdrs_data("path/to/your/data.csv")
 results <- nvdrs_process_batch(data = data)
 
 # Export results
 export_results(results, "output/ipv_results.csv", format = "csv")
-
-# Check logs - API calls are automatically logged to SQLite
-# Database location: logs/api_logs.sqlite
 ```
 
-### Step-by-Step Processing
+### Advanced Usage
 
 ```r
 library(nvdrsipvdetector)
 library(readxl)
 
-# 1. Load your NVDRS data
-# Can be CSV or Excel format
+# Load your NVDRS data
 data <- read_excel("data/sui_all_flagged.xlsx")
 
-# 2. Validate and clean the data
-validated_data <- validate_input_data(data)
-# This removes empty narratives and ensures required columns exist
+# Process individual narratives with custom config
+my_config <- load_config("custom_settings.yml")
 
-# 3. Process individual narratives
-# For Law Enforcement narrative
-le_result <- detect_ipv(
+# Process with explicit config and connection
+conn <- init_database("my_logs.sqlite")
+result <- detect_ipv(
   narrative = data$NarrativeLE[1],
-  narrative_type = "LE"
+  type = "LE",
+  config = my_config,
+  conn = conn
 )
+DBI::dbDisconnect(conn)
 
-# For Coroner/Medical Examiner narrative  
-cme_result <- detect_ipv(
-  narrative = data$NarrativeCME[1],
-  narrative_type = "CME"
-)
-
-# 4. Reconcile LE and CME results
+# Reconcile LE and CME results manually
+le_result <- detect_ipv(data$NarrativeLE[1], type = "LE")
+cme_result <- detect_ipv(data$NarrativeCME[1], type = "CME")
 final_result <- reconcile_le_cme(
   le_result = le_result,
   cme_result = cme_result,
   weights = list(le = 0.4, cme = 0.6)
 )
 
-# 5. View the results
 print(final_result)
 ```
 

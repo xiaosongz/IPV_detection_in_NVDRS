@@ -1,6 +1,9 @@
-#' Simple IPV Detection Wrapper
+#' Simple IPV Detection Wrapper (Deprecated)
 #'
-#' @description Simplified function that handles config and database automatically
+#' @description 
+#' This function is deprecated. Please use \code{\link{detect_ipv}} instead,
+#' which now handles configuration and database connections automatically.
+#' 
 #' @param narrative Narrative text to analyze
 #' @param narrative_type "LE" or "CME" 
 #' @param log_to_db Whether to log API calls to database (default TRUE)
@@ -8,26 +11,23 @@
 #' @export
 #' @examples
 #' \dontrun{
+#' # Old way (deprecated):
 #' result <- detect_ipv_simple("Domestic violence incident", "LE")
+#' 
+#' # New way (recommended):
+#' result <- detect_ipv("Domestic violence incident", type = "LE")
 #' }
 detect_ipv_simple <- function(narrative, narrative_type = "LE", log_to_db = TRUE) {
-  # Load config using the updated load_config function which handles paths automatically
-  config <- load_config()
+  .Deprecated("detect_ipv", 
+              package = "nvdrsipvdetector",
+              msg = paste("detect_ipv_simple() is deprecated.",
+                         "Please use detect_ipv() instead,",
+                         "which now handles configuration automatically."))
   
-  # Initialize database connection if logging
-  conn <- NULL
-  if (log_to_db) {
-    conn <- init_database(config$database$path)
-    on.exit(DBI::dbDisconnect(conn), add = TRUE)
-  }
-  
-  # Detect IPV
-  result <- detect_ipv(
-    narrative = narrative,
-    type = narrative_type,
-    config = config,
-    conn = conn
-  )
-  
-  return(result)
+  # Call the new unified function
+  detect_ipv(narrative = narrative,
+             type = narrative_type,
+             config = NULL,  # Will auto-load
+             conn = NULL,    # Will auto-create if needed
+             log_to_db = log_to_db)
 }

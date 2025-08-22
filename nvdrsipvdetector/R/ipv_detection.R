@@ -113,14 +113,40 @@ load_config <- function(config_path = NULL) {
 
 #' Detect IPV in Narrative
 #'
-#' @param narrative Narrative text
-#' @param type "LE" or "CME"
-#' @param config Configuration
-#' @param conn Database connection
-#' @return Detection result
+#' @description 
+#' Main function for detecting intimate partner violence in narratives.
+#' Automatically handles configuration and database connections.
+#'
+#' @param narrative Narrative text to analyze
+#' @param type "LE" for law enforcement or "CME" for medical examiner
+#' @param config Configuration object, path to config file, or NULL (uses default)
+#' @param conn Database connection or NULL (auto-creates if logging enabled)
+#' @param log_to_db Whether to log API calls to database (default TRUE)
+#' @return List with ipv_detected, confidence, indicators, and rationale
 #' @export
-detect_ipv <- function(narrative, type = "LE", config, conn = NULL) {
-  # Handle empty narratives
+#' @examples
+#' \dontrun{
+#' # Simple usage - everything automatic
+#' result <- detect_ipv("Domestic violence incident")
+#' 
+#' # Specify narrative type
+#' result <- detect_ipv("Victim injuries", type = "CME")
+#' 
+#' # Use custom config file
+#' result <- detect_ipv("Narrative text", config = "custom_config.yml")
+#' 
+#' # Advanced usage with explicit config and connection
+#' my_config <- load_config("my_settings.yml")
+#' my_conn <- init_database("my_logs.sqlite")
+#' result <- detect_ipv("Narrative", config = my_config, conn = my_conn)
+#' }
+detect_ipv <- function(narrative, 
+                      type = "LE", 
+                      config = NULL, 
+                      conn = NULL, 
+                      log_to_db = TRUE) {
+  
+  # Handle empty narratives first
   if (is.na(narrative) || trimws(narrative) == "") {
     return(list(
       ipv_detected = NA,
@@ -128,6 +154,28 @@ detect_ipv <- function(narrative, type = "LE", config, conn = NULL) {
       indicators = character(),
       rationale = "No narrative available"
     ))
+  }
+  
+  # Smart config handling
+  if (is.null(config)) {
+    # Load default config
+    config <- load_config()
+  } else if (is.character(config)) {
+    # Assume it's a path to config file
+    config <- load_config(config)
+  }
+  # If config is already a list, use as-is
+  
+  # Smart connection handling
+  manage_conn <- FALSE
+  if (is.null(conn) && log_to_db && !is.null(config$database$path)) {
+    conn <- init_database(config$database$path)
+    manage_conn <- TRUE  # Track that we created it
+    on.exit({
+      if (manage_conn && !is.null(conn)) {
+        DBI::dbDisconnect(conn)
+      }
+    }, add = TRUE)
   }
   
   # Build prompt with config for templates
@@ -138,7 +186,7 @@ detect_ipv <- function(narrative, type = "LE", config, conn = NULL) {
   result <- send_to_llm(prompt, config)
   response_time_ms <- as.numeric(difftime(Sys.time(), start_time, units = "secs")) * 1000
   
-  # Log if connection provided
+  # Log if connection available (either provided or created)
   if (!is.null(conn)) {
     log_api_request(conn, "unknown", type, prompt, result, response_time_ms)
   }
