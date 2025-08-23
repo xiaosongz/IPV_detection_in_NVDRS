@@ -1,13 +1,96 @@
 # nvdrs_ipv_detector Package Specification
 
 ## Critical Rules
-- No lose files, test files should be saved under project dir \test
-- summary and notes shoud be saved under \docs
+- **NO LOOSE FILES IN ROOT** - Every file must be in its designated directory
 - Use trimws() on ALL text inputs to remove trailing spaces
 - NEVER store API keys in code - use environment variables
 - ALL functions must use explicit namespaces (httr2::request, not library())
 - Process narratives in chunks of 50 to prevent memory issues
 - Test with empty/NA narratives first - they WILL occur
+
+## FILE ORGANIZATION RULES - NEVER VIOLATE
+
+### ROOT DIRECTORY - ONLY THESE FILES ALLOWED:
+```
+/                          # Root should ONLY contain:
+├── README.md             # Main project documentation
+├── CLAUDE.md             # This file - AI instructions
+├── CLAUDE.local.md       # Local AI instructions (gitignored)
+├── .gitignore            # Git ignore rules
+├── .env.example          # Environment variable template
+├── *.Rproj               # RStudio project file
+└── LICENSE               # License file
+```
+
+### MANDATORY FILE PLACEMENT:
+```
+scripts/                   # ALL R scripts go here
+├── analysis/             # Analysis scripts (analyze_*.R)
+├── monitoring/           # Monitoring scripts (monitor_*.R)
+├── testing/              # Test scripts (test_*.R, run_*.R)
+├── debugging/            # Debug scripts (debug_*.R)
+└── utilities/            # Helper scripts
+
+docs/                      # ALL documentation
+├── reports/              # Analysis reports (*.md)
+├── summaries/            # Summary documents
+├── specifications/       # Technical specs
+└── notes/                # Meeting notes, observations
+
+config/                    # ALL configuration files
+├── *.yml                 # YAML configs
+├── *.yaml                # YAML configs
+└── *.json                # JSON configs
+
+tests/                     # Formal test suite
+├── testthat/             # Unit tests
+├── test_data/            # Test datasets
+└── test_results/         # Test output files
+
+results/                   # ALL output files
+├── *.csv                 # Result CSVs
+├── *.RData               # R data files
+└── *.rds                 # R serialized objects
+
+logs/                      # ALL log files
+├── *.log                 # Text logs
+├── *.sqlite              # Database logs
+└── *.txt                 # Debug output
+```
+
+### BEFORE CREATING ANY FILE:
+1. **STOP** - Ask: "Where does this file belong?"
+2. **CHECK** - Does the directory exist? If not, create it
+3. **PLACE** - Put the file in the correct location
+4. **NEVER** - Save to root unless it's in the allowed list above
+
+### EXAMPLES:
+```r
+# ❌ WRONG - Never do this:
+write.csv(results, "analysis_results.csv")
+source("test_script.R")
+
+# ✅ CORRECT - Always do this:
+write.csv(results, "results/analysis_results.csv")
+source("scripts/testing/test_script.R")
+```
+
+### WHEN CREATING NEW FILES:
+- Analysis script? → `scripts/analysis/`
+- Test script? → `scripts/testing/`
+- Report/summary? → `docs/reports/`
+- Configuration? → `config/`
+- Data output? → `results/`
+- Log file? → `logs/`
+
+### CLEANUP CHECK:
+After any work session, run:
+```r
+# Check for loose files in root
+root_files <- list.files(".", pattern = "\\.(R|r|csv|txt|log|yml|yaml)$")
+if(length(root_files) > 0) {
+  warning("LOOSE FILES IN ROOT: ", paste(root_files, collapse = ", "))
+}
 
 ## Package Structure
 ```
