@@ -7,11 +7,21 @@
 load_config(config_path = NULL)
 }
 \arguments{
-\item{config_path}{Path to settings.yml}
+\item{config_path}{Optional path to settings.yml. If NULL, searches standard locations.}
 }
 \value{
-Configuration list
+Configuration list with processed environment variables
 }
 \description{
-Load Configuration
+Loads configuration from various locations with intelligent search.
+Searches in order: explicit path, current directory, user home, package defaults.
+}
+\examples{
+\dontrun{
+# Use default search
+config <- load_config()
+
+# Specify custom config
+config <- load_config("my_settings.yml")
+}
 }

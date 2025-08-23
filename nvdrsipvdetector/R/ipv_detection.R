@@ -66,26 +66,66 @@ log_api_request <- function(conn, incident_id, prompt_type, prompt_text,
 
 #' Load Configuration
 #'
-#' @param config_path Path to settings.yml
-#' @return Configuration list
+#' @description 
+#' Loads configuration from various locations with intelligent search.
+#' Searches in order: explicit path, current directory, user home, package defaults.
+#'
+#' @param config_path Optional path to settings.yml. If NULL, searches standard locations.
+#' @return Configuration list with processed environment variables
 #' @export
+#' @examples
+#' \dontrun{
+#' # Use default search
+#' config <- load_config()
+#' 
+#' # Specify custom config
+#' config <- load_config("my_settings.yml")
+#' }
 load_config <- function(config_path = NULL) {
-  # If no path provided, try to find settings.yml
-  if (is.null(config_path)) {
-    # First try package installation location
-    config_path <- system.file("settings.yml", package = "nvdrsipvdetector")
-    
-    # If not installed, try development location
-    if (config_path == "") {
-      config_path <- "inst/settings.yml"
-      if (!file.exists(config_path)) {
-        config_path <- "nvdrsipvdetector/inst/settings.yml"
-      }
+  # Define search paths in priority order
+  search_paths <- c(
+    config_path,                     # User specified
+    "settings.yml",                  # Current directory
+    "config/settings.yml",           # Config subdirectory
+    ".nvdrs/settings.yml",          # Hidden config
+    file.path(Sys.getenv("HOME"), ".nvdrs", "settings.yml")  # User home
+  )
+  
+  # Remove NULLs and search for first existing file
+  search_paths <- search_paths[!sapply(search_paths, is.null)]
+  
+  config_found <- FALSE
+  for (path in search_paths) {
+    if (file.exists(path)) {
+      config_path <- path
+      config_found <- TRUE
+      cli::cli_alert_success("Using configuration: {.file {path}}")
+      break
     }
   }
   
-  if (!file.exists(config_path)) {
-    stop("Configuration file not found. Tried: ", config_path)
+  # If no user config found, use package defaults
+  if (!config_found) {
+    # Try package installation location
+    config_path <- system.file("settings.yml", package = "nvdrsipvdetector")
+    
+    # If not installed, try development locations
+    if (config_path == "") {
+      if (file.exists("inst/settings.yml")) {
+        config_path <- "inst/settings.yml"
+      } else if (file.exists("nvdrsipvdetector/inst/settings.yml")) {
+        config_path <- "nvdrsipvdetector/inst/settings.yml"
+      }
+    }
+    
+    if (!file.exists(config_path)) {
+      cli::cli_alert_danger("No configuration found")
+      cli::cli_alert_info("Run {.code init_config()} to create a settings.yml file")
+      stop("Configuration file not found. Run init_config() to get started.")
+    }
+    
+    cli::cli_alert_warning("Using default package configuration (read-only)")
+    cli::cli_alert_info("Run {.code init_config()} to create your own settings.yml")
   }
   
   # Read and parse YAML
@@ -109,6 +149,88 @@ load_config <- function(config_path = NULL) {
   
   config <- yaml::yaml.load(paste(config_text, collapse = "\n"))
   return(config)
+}
+
+#' Initialize User Configuration
+#'
+#' @description 
+#' Creates a user-editable configuration file by copying the package template
+#' to your project directory. This allows you to customize settings without
+#' modifying the package installation.
+#'
+#' @param path Where to create the configuration file (default: "settings.yml")
+#' @param force Overwrite existing file without prompting (default: FALSE)
+#' @return Path to created configuration file (invisibly)
+#' @export
+#' @examples
+#' \dontrun{
+#' # Create settings.yml in current directory
+#' init_config()
+#' 
+#' # Create in specific location
+#' init_config("config/my_settings.yml")
+#' 
+#' # Force overwrite
+#' init_config(force = TRUE)
+#' }
+init_config <- function(path = "settings.yml", force = FALSE) {
+  # Find template file
+  template <- system.file("settings.yml", package = "nvdrsipvdetector")
+  
+  # If package not installed, try development locations
+  if (template == "") {
+    if (file.exists("inst/settings.yml")) {
+      template <- "inst/settings.yml"
+    } else if (file.exists("nvdrsipvdetector/inst/settings.yml")) {
+      template <- "nvdrsipvdetector/inst/settings.yml"
+    } else {
+      stop("Cannot find template configuration. Is the package installed correctly?")
+    }
+  }
+  
+  # Check if target exists
+  if (file.exists(path) && !force) {
+    cli::cli_alert_warning("Configuration file already exists: {.file {path}}")
+    
+    if (interactive()) {
+      response <- readline("Overwrite? (y/N): ")
+      if (tolower(response) != "y") {
+        cli::cli_alert_info("Configuration initialization cancelled")
+        return(invisible(NULL))
+      }
+    } else {
+      cli::cli_alert_info("Use {.code force = TRUE} to overwrite")
+      return(invisible(NULL))
+    }
+  }
+  
+  # Create directory if needed
+  dir_path <- dirname(path)
+  if (dir_path != "." && !dir.exists(dir_path)) {
+    dir.create(dir_path, recursive = TRUE)
+    cli::cli_alert_success("Created directory: {.path {dir_path}}")
+  }
+  
+  # Copy template
+  file.copy(template, path, overwrite = TRUE)
+  cli::cli_alert_success("Created configuration file: {.file {path}}")
+  
+  # Provide helpful next steps
+  cli::cli_h2("Next steps:")
+  cli::cli_alert_info("1. Edit {.file {path}} to configure your LLM server")
+  cli::cli_alert_info("2. Set {.code base_url} to your LM Studio/Ollama server address")
+  cli::cli_alert_info("3. Set {.code model} to your preferred model")
+  cli::cli_alert_info("4. Adjust {.code temperature} and {.code max_tokens} as needed")
+  
+  # Open in editor if possible
+  if (interactive() && requireNamespace("rstudioapi", quietly = TRUE)) {
+    if (rstudioapi::isAvailable()) {
+      rstudioapi::navigateToFile(path)
+      cli::cli_alert_success("Opened configuration file in editor")
+    }
+  }
+  
+  return(invisible(path))
 }
 
 #' Detect IPV in Narrative
