@@ -1,0 +1,21 @@
+"IncidentID","Manual_IPV_Flag","Predicted_IPV","Confidence","Evidence_Tier","Primary_Indicators","Relationship_Type","Reliability_Score","Processing_Time"
+322959,TRUE,FALSE,0.385841860435903,"none","no_indicators","unknown",0.756698207557201,6.98268575640395
+323123,TRUE,TRUE,0.640399979171343,"direct","prior incidents; domestic violence; jealousy","former_partner",0.683096710499376,6.2303887042217
+324972,TRUE,TRUE,0.76809982387349,"circumstantial","relationship conflict","ex_spouse",0.895556691568345,2.83226100634784
+326290,TRUE,FALSE,0.434090888430364,"none","no_indicators","unknown",0.79503824710846,7.0160255599767
+326605,TRUE,TRUE,0.805550918821245,"contextual","controlling behavior; relationship conflict","spouse",0.50293365875259,6.99749648151919
+330177,TRUE,NA,NA,NA,"ERROR: malformed JSON response",NA,NA,NA
+333985,TRUE,TRUE,0.887272978993133,"circumstantial","prior incidents","current_partner",0.888386644143611,5.83987261680886
+336771,TRUE,FALSE,0.3116809473373,"none","no_indicators","unknown",0.770910732075572,6.49277231702581
+336929,TRUE,TRUE,0.754323880397715,"direct","controlling behavior; partner present","ex_spouse",0.803817707020789,7.89690318750218
+336938,TRUE,TRUE,0.672163421893492,"contextual","partner present; jealousy","current_partner",0.586554166022688,2.8428745646961
+338403,TRUE,TRUE,0.77448120075278,"contextual","prior incidents","ex_spouse",0.758252751361579,4.15416983515024
+338850,TRUE,NA,NA,NA,"ERROR: malformed JSON response",NA,NA,NA
+355425,TRUE,NA,NA,NA,"ERROR: malformed JSON response",NA,NA,NA
+359530,TRUE,TRUE,0.600071668974124,"contextual","jealousy; prior incidents","former_partner",0.87025789944455,7.59820476407185
+361697,TRUE,TRUE,0.665147309470922,"contextual","jealousy; prior incidents","current_partner",0.876982276793569,4.33367017190903
+362292,TRUE,TRUE,0.760736998147331,"direct","controlling behavior","spouse",0.642266381531954,2.00828506145626
+369177,TRUE,TRUE,0.776903491071425,"direct","domestic violence","current_partner",0.867681571654975,4.36983827129006
+370153,TRUE,TRUE,0.881215754896402,"circumstantial","controlling behavior","current_partner",0.828561569564044,5.47892539435998
+370304,TRUE,NA,NA,NA,"ERROR: malformed JSON response",NA,NA,NA
+374947,TRUE,FALSE,0.520058387867175,"none","no_indicators","unknown",0.568064992502332,6.90338266640902

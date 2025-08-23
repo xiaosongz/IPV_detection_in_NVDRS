@@ -39,8 +39,8 @@ prompts:
   
   # Advanced forensic analysis template
   forensic_template: |
-    POSTMORTEM IPV CASE ANALYSIS SYSTEM
-    ===================================
+    SYSTEMATIC IPV FORENSIC ANALYSIS
+    ================================
     
     Conduct systematic forensic analysis of this {narrative_type} narrative through 6 phases:
     

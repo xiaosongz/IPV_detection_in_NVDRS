@@ -1,0 +1,74 @@
+  # Optimized forensic analysis template - Eliminates complexity, improves reliability
+  forensic_template: |
+    SYSTEMATIC IPV FORENSIC ANALYSIS
+    ================================
+    
+    You are analyzing a {narrative_type} death investigation narrative. Follow this structured approach:
+    
+    1. EVIDENCE EXTRACTION (Look for these specific indicators)
+    
+    DIRECT PHYSICAL EVIDENCE (Highest reliability):
+    - Multiple injuries in various healing stages
+    - Defensive wounds on hands/arms  
+    - Strangulation marks (petechiae, ligature marks, fingernail marks on neck)
+    - Pattern injuries matching objects/weapons
+    - Sexual assault injuries
+    - Prior medical records of unexplained injuries
+    
+    BEHAVIORAL DOCUMENTATION (High reliability):
+    - History of domestic violence calls
+    - Active/recent restraining orders
+    - Witness statements of threats or violence
+    - Recent separation or custody disputes
+    - Control behaviors (financial, social, digital surveillance)
+    - Help-seeking behaviors (shelters, counseling, legal aid)
+    
+    CIRCUMSTANTIAL CONTEXT (Moderate reliability):
+    - Weapon belonged to intimate partner
+    - Death occurred at shared residence during dispute
+    - Victim had expressed fear of specific person
+    - Recent changes in relationship status
+    - Suicide note mentioning partner/relationship
+    
+    2. CONTRADICTION ANALYSIS
+    - Does physical evidence match stated circumstances?
+    - Are there inconsistencies between witness accounts?
+    - Do injuries suggest self-infliction or external cause?
+    
+    3. CONFIDENCE CALIBRATION
+    Base confidence on evidence hierarchy:
+    - Multiple direct physical indicators: 0.8-0.95
+    - Single strong physical + behavioral evidence: 0.6-0.8  
+    - Only behavioral/circumstantial evidence: 0.3-0.6
+    - Inconsistent or minimal evidence: 0.1-0.3
+    
+    NARRATIVE TEXT:
+    '{narrative}'
+    
+    CRITICAL ANALYSIS RULES:
+    - State only what the narrative explicitly contains
+    - When evidence is missing, state "insufficient information" - do not guess
+    - If narrative is empty/unreadable, return minimal structure with confidence 0.0
+    - Multiple contradictory interpretations = lower confidence
+    - Single clear interpretation = higher confidence
+    
+    RESPOND WITH THIS EXACT JSON STRUCTURE:
+    {{
+      "ipv_detected": true/false,
+      "confidence": 0.0-1.0,
+      "evidence_found": [
+        {{
+          "type": "physical|behavioral|circumstantial", 
+          "item": "specific evidence description",
+          "reliability_score": 0.0-1.0
+        }}
+      ],
+      "death_mechanism": "homicide|suicide|undetermined|accident",
+      "primary_indicators": ["most important evidence items"],
+      "contradictions": ["any conflicting information"],
+      "data_quality": {{
+        "narrative_completeness": 0.0-1.0,
+        "missing_critical_info": ["what key information is absent"],
+        "confidence_factors": "explanation of confidence level"
+      }}
+    }}
