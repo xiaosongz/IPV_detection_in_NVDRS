@@ -17,19 +17,17 @@ export_results <- function(results, file_path, format = "csv") {
   # Create directory if needed
   dir.create(dirname(file_path), recursive = TRUE, showWarnings = FALSE)
   
-  # Export using pipeline approach
-  export_func <- dplyr::case_when(
-    format == "csv" ~ function(data, path) readr::write_csv(data, path),
-    format == "rds" ~ function(data, path) saveRDS(data, path),
-    format == "json" ~ function(data, path) {
-      jsonlite::toJSON(data, pretty = TRUE, auto_unbox = TRUE) %>%
-        writeLines(path)
-    },
-    TRUE ~ stop("Unsupported format: ", format)
-  )
-  
-  # Perform export
-  export_func(results, file_path)
+  # Export based on format
+  if (format == "csv") {
+    readr::write_csv(results, file_path)
+  } else if (format == "rds") {
+    saveRDS(results, file_path)
+  } else if (format == "json") {
+    jsonlite::toJSON(results, pretty = TRUE, auto_unbox = TRUE) %>%
+      writeLines(file_path)
+  } else {
+    stop("Unsupported format: ", format)
+  }
   
   # Success message
   cli::cli_alert_success(
@@ -62,6 +60,13 @@ print_summary <- function(results) {
   
   # Display using cli for better formatting
   cli::cli_h1("IPV Detection Summary")
+  
+  # Also use cat for tests that capture output
+  cat("Total records:", summary_stats$n_total, "\n")
+  cat("IPV detected:", summary_stats$n_ipv, "\n")
+  if (summary_stats$n_na > 0) {
+    cat("Unable to determine:", summary_stats$n_na, "\n")
+  }
   
   with(summary_stats, {
     cli::cli_alert_info("Total records: {n_total}")

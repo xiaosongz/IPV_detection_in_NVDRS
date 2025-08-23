@@ -30,7 +30,8 @@ test_that("export_results handles RDS format", {
   expect_true(file.exists(tmp_file))
   
   read_back <- readRDS(tmp_file)
-  expect_equal(read_back, results)
+  # Compare as data frames since export_results converts to tibble
+  expect_equal(as.data.frame(read_back), results)
   
   unlink(tmp_file)
 })

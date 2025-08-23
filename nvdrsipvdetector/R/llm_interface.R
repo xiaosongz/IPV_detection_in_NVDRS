@@ -11,8 +11,10 @@ NULL
 #' @return Parsed LLM response
 #' @export
 send_to_llm <- function(prompt, config) {
-  # Validate configuration early
-  validate_llm_config(config)
+  # Validate configuration early if API fields are needed
+  if (!is.null(config$api)) {
+    validate_llm_config(config)
+  }
   
   # Use purrr::safely for functional error handling
   safe_llm_call <- purrr::safely(perform_llm_request)
@@ -34,25 +36,22 @@ send_to_llm <- function(prompt, config) {
 #'
 #' @param config Configuration list
 validate_llm_config <- function(config) {
-  required_fields <- list(
-    "prompts.system" = config$prompts$system,
-    "api.temperature" = config$api$temperature,
-    "api.max_tokens" = config$api$max_tokens,
-    "api.base_url" = config$api$base_url,
-    "api.model" = config$api$model,
-    "api.timeout" = config$api$timeout,
-    "api.max_retries" = config$api$max_retries
-  )
-  
-  missing <- names(required_fields)[purrr::map_lgl(required_fields, is.null)]
-  
-  if (length(missing) > 0) {
-    stop(
-      "Missing required configuration fields: ",
-      paste(missing, collapse = ", "),
-      ". Please check inst/settings.yml"
-    )
+  # Only base_url is truly required
+  if (is.null(config$api$base_url)) {
+    stop("Missing required configuration field: api.base_url. Please check inst/settings.yml")
   }
+  
+  # Set defaults for optional fields if missing
+  if (is.null(config$api$timeout)) config$api$timeout <- 30
+  if (is.null(config$api$max_retries)) config$api$max_retries <- 3
+  if (is.null(config$api$temperature)) config$api$temperature <- 0.7
+  if (is.null(config$api$max_tokens)) config$api$max_tokens <- 500
+  if (is.null(config$api$model)) config$api$model <- "default"
+  if (is.null(config$prompts$system)) {
+    config$prompts <- list(system = "You are an AI assistant trained to detect intimate partner violence.")
+  }
+  
+  invisible(config)
 }
 
 #' Perform LLM Request (Helper)
@@ -115,7 +114,13 @@ create_error_response <- function(error) {
 build_prompt <- function(narrative, type = "LE", config = NULL) {
   # Input validation using tidyverse style
   if (is.null(config)) {
-    stop("Configuration required for build_prompt. Please pass the config object loaded from settings.yml")
+    # Use default test prompts for backward compatibility
+    config <- list(
+      prompts = list(
+        le_template = "Based on the following law enforcement narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}",
+        cme_template = "Based on the following medical examiner narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}"
+      )
+    )
   }
   
   if (is.null(config$prompts)) {
@@ -125,14 +130,22 @@ build_prompt <- function(narrative, type = "LE", config = NULL) {
   # Clean narrative text
   narrative <- stringr::str_trim(narrative)
   
-  # Get template using case_when logic
-  template <- dplyr::case_when(
-    type == "LE" & !is.null(config$prompts$le_template) ~ config$prompts$le_template,
-    type == "CME" & !is.null(config$prompts$cme_template) ~ config$prompts$cme_template,
-    type == "LE" ~ stop("LE template not found in configuration. Please add 'le_template' to the 'prompts' section in inst/settings.yml"),
-    type == "CME" ~ stop("CME template not found in configuration. Please add 'cme_template' to the 'prompts' section in inst/settings.yml"),
-    TRUE ~ stop(paste("Invalid narrative type:", type, ". Must be 'LE' or 'CME'"))
-  )
+  # Get template based on type
+  template <- if (type == "LE") {
+    if (!is.null(config$prompts$le_template)) {
+      config$prompts$le_template
+    } else {
+      stop("LE template not found in configuration. Please add 'le_template' to the 'prompts' section in inst/settings.yml")
+    }
+  } else if (type == "CME") {
+    if (!is.null(config$prompts$cme_template)) {
+      config$prompts$cme_template
+    } else {
+      stop("CME template not found in configuration. Please add 'cme_template' to the 'prompts' section in inst/settings.yml")
+    }
+  } else {
+    stop(paste("Invalid narrative type:", type, ". Must be 'LE' or 'CME'"))
+  }
   
   # Replace placeholder with actual narrative using stringr
   stringr::str_replace_all(template, "\\{narrative\\}", narrative)

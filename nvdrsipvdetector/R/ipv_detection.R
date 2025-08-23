@@ -194,6 +194,17 @@ detect_ipv <- function(narrative,
   return(result)
 }
 
+#' Reconcile Results (for backward compatibility)
+#'
+#' @param results Results list or data frame
+#' @param config Configuration list
+#' @return Reconciled results
+#' @export
+reconcile_results <- function(results, config) {
+  # Just delegate to reconcile_batch_results for backward compatibility
+  reconcile_batch_results(results, config)
+}
+
 #' Process NVDRS Batch
 #'
 #' @param data Tibble with columns: IncidentID, NarrativeLE, NarrativeCME

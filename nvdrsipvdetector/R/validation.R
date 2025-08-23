@@ -90,19 +90,13 @@ confusion_matrix <- function(predictions, actual) {
     actual
   }
   
-  # Create analysis tibble and generate confusion matrix
-  tibble::tibble(
-    predicted = pred_vec,
-    actual = actual_vec
-  ) %>%
-    dplyr::filter(!is.na(predicted) & !is.na(actual)) %>%
-    dplyr::count(predicted, actual, name = "count") %>%
-    tidyr::pivot_wider(
-      names_from = actual,
-      values_from = count,
-      values_fill = 0L,
-      names_prefix = "actual_"
-    )
+  # Remove NA values
+  valid_idx <- !is.na(pred_vec) & !is.na(actual_vec)
+  pred_vec <- pred_vec[valid_idx]
+  actual_vec <- actual_vec[valid_idx]
+  
+  # Create standard confusion matrix table
+  table(Predicted = pred_vec, Actual = actual_vec)
 }
 
 #' Print Validation Report (Modernized)
