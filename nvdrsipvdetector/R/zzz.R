@@ -13,6 +13,7 @@
 #' @importFrom yaml yaml.load
 #' @importFrom rlang %||%
 #' @importFrom scales percent
+#' @importFrom R6 R6Class
 NULL
 
 # Global variables to avoid R CMD check NOTEs

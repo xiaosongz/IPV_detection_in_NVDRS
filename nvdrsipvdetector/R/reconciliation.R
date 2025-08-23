@@ -1,6 +1,7 @@
 #' Combine LE/CME Results
 #'
 #' @description Functions for reconciling LE and CME detection results
+#' @name reconciliation
 #' @keywords internal
 NULL
 

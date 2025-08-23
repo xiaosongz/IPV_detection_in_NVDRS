@@ -1,6 +1,7 @@
 #' Export Functions
 #'
 #' @description Functions for exporting detection results
+#' @name output
 #' @keywords internal
 NULL
 

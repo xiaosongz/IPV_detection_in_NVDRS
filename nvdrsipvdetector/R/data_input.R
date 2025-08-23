@@ -1,6 +1,7 @@
 #' Read and Validate CSV
 #'
 #' @description Functions for reading and validating NVDRS data
+#' @name data_input
 #' @keywords internal
 NULL
 

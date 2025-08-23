@@ -1,6 +1,7 @@
 #' Core Detection Logic
 #'
 #' @description Main IPV detection functions
+#' @name ipv_detection
 #' @keywords internal
 NULL
 
@@ -469,5 +470,275 @@ reconcile_batch_results <- function(results, config) {
         TRUE ~ confidence >= config$weights$threshold
       )
     )
+}
+
+#' Detect IPV with Forensic Analysis
+#'
+#' @description
+#' Advanced IPV detection using comprehensive forensic analysis framework.
+#' Provides systematic analysis through 6 phases: death classification,
+#' directionality assessment, suicide analysis, evidence hierarchy,
+#' temporal patterns, and quality control.
+#'
+#' @param narrative Narrative text to analyze
+#' @param type "LE" for law enforcement or "CME" for medical examiner
+#' @param incident_id Unique incident identifier (auto-generated if NULL)
+#' @param config Configuration object or path (uses forensic template)
+#' @param conn Database connection for logging
+#' @param log_to_db Whether to log the API request
+#' @return IPVForensicResult object with comprehensive analysis
+#' @export
+#' @examples
+#' \dontrun{
+#' # Basic forensic analysis
+#' result <- detect_ipv_forensic(
+#'   narrative = "Law enforcement narrative text...",
+#'   type = "LE"
+#' )
+#'
+#' # Access comprehensive analysis
+#' summary <- result$get_summary()
+#' tibble_data <- result$to_tibble()
+#'
+#' # Advanced usage with custom config and connection
+#' config <- load_config("forensic_settings.yml")
+#' conn <- init_database("forensic_logs.sqlite")
+#' result <- detect_ipv_forensic(
+#'   narrative = narrative,
+#'   type = "CME",
+#'   incident_id = "2024-001",
+#'   config = config,
+#'   conn = conn
+#' )
+#' }
+detect_ipv_forensic <- function(narrative,
+                               type = "LE",
+                               incident_id = NULL,
+                               config = NULL,
+                               conn = NULL,
+                               log_to_db = TRUE) {
+
+  # Generate incident ID if not provided
+  if (is.null(incident_id)) {
+    incident_id <- paste0("forensic_", format(Sys.time(), "%Y%m%d_%H%M%S"))
+  }
+
+  # Handle empty narratives
+  if (is.null(narrative) || is.na(narrative) || trimws(narrative) == "") {
+    cli::cli_alert_warning("Empty narrative provided for incident {incident_id}")
+    
+    # Create forensic result with minimal data
+    forensic_result <- ipv_forensic_result$new(
+      incident_id = incident_id,
+      le_narrative = if (type == "LE") "[Empty]" else NULL,
+      cme_narrative = if (type == "CME") "[Empty]" else NULL
+    )
+    
+    # Set error state
+    forensic_result$update_death_classification(
+      classification = "insufficient_data",
+      confidence = 0,
+      rationale = "No narrative text available"
+    )
+    
+    forensic_result$quality_metrics$analysis_flags <- c("EMPTY_NARRATIVE")
+    forensic_result$quality_metrics$data_completeness <- 0
+    
+    return(forensic_result)
+  }
+
+  # Smart config handling - enable forensic analysis
+  if (is.null(config)) {
+    config <- load_config()
+  } else if (is.character(config)) {
+    config <- load_config(config)
+  }
+  
+  # Ensure forensic analysis is enabled
+  if (is.null(config$processing$use_forensic_analysis)) {
+    config$processing$use_forensic_analysis <- TRUE
+  }
+
+  # Smart connection handling
+  manage_conn <- FALSE
+  if (is.null(conn) && log_to_db && !is.null(config$database$path)) {
+    conn <- init_database(config$database$path)
+    manage_conn <- TRUE
+    on.exit({
+      if (manage_conn && !is.null(conn)) {
+        DBI::dbDisconnect(conn)
+      }
+    }, add = TRUE)
+  }
+
+  # Create forensic result object
+  forensic_result <- ipv_forensic_result$new(
+    incident_id = incident_id,
+    le_narrative = if (type == "LE") narrative else NULL,
+    cme_narrative = if (type == "CME") narrative else NULL
+  )
+
+  # Build forensic prompt with token management
+  max_narrative_tokens <- config$processing$max_narrative_tokens %||% 6000
+  prompt <- build_forensic_prompt(
+    narrative = narrative,
+    type = type,
+    config = config,
+    max_narrative_tokens = max_narrative_tokens
+  )
+
+  # Send to LLM with forensic mode
+  start_time <- Sys.time()
+  result <- send_to_llm(prompt, config, forensic_mode = TRUE)
+  end_time <- Sys.time()
+  response_time_ms <- as.numeric(difftime(end_time, start_time, units = "secs")) * 1000
+
+  # Log the API request if database available
+  if (log_to_db && !is.null(conn)) {
+    log_api_request(
+      conn = conn,
+      incident_id = incident_id,
+      prompt_type = paste0(type, "_FORENSIC"),
+      prompt_text = prompt,
+      response = result,
+      response_time_ms = response_time_ms
+    )
+  }
+
+  # Check if request was successful
+  if (!result$success) {
+    cli::cli_alert_danger("Forensic analysis failed for incident {incident_id}")
+    forensic_result$quality_metrics$analysis_flags <- c("API_ERROR")
+    forensic_result$quality_metrics$overall_confidence <- 0
+    return(forensic_result)
+  }
+
+  # Populate forensic result with LLM analysis
+  forensic_result <- populate_forensic_result_from_llm(
+    forensic_result,
+    result,
+    type
+  )
+
+  # Perform additional validation and quality checks
+  validation <- forensic_result$validate_analysis()
+  if (!validation$is_valid) {
+    cli::cli_alert_warning(
+      "Validation issues for incident {incident_id}: {paste(validation$issues, collapse = ', ')}"
+    )
+  }
+
+  forensic_result
+}
+
+#' Populate Forensic Result from LLM Response
+#'
+#' @description
+#' Transfers structured LLM forensic analysis to IPVForensicResult object.
+#'
+#' @param forensic_result IPVForensicResult object
+#' @param llm_result LLM response with forensic analysis
+#' @param narrative_type "LE" or "CME"
+#' @return Updated forensic result
+populate_forensic_result_from_llm <- function(forensic_result, llm_result, narrative_type) {
+  
+  # Update death classification
+  if (!is.null(llm_result$death_classification)) {
+    forensic_result$update_death_classification(
+      classification = llm_result$death_classification$primary %||% "undetermined",
+      confidence = llm_result$death_classification$confidence %||% 0,
+      evidence = llm_result$death_classification$supporting_evidence %||% character(),
+      rationale = llm_result$death_classification$rationale %||% ""
+    )
+  }
+
+  # Update directionality assessment
+  if (!is.null(llm_result$directionality)) {
+    forensic_result$update_directionality(
+      perpetrator_evidence = llm_result$directionality$perpetrator_indicators %||% character(),
+      victim_evidence = llm_result$directionality$victim_indicators %||% character(),
+      bidirectional_score = llm_result$directionality$bidirectional_score %||% 0,
+      primary_direction = llm_result$directionality$primary_direction %||% "undetermined",
+      confidence = llm_result$directionality$confidence %||% 0
+    )
+  }
+
+  # Update suicide analysis
+  if (!is.null(llm_result$suicide_analysis)) {
+    forensic_result$update_suicide_analysis(
+      intent_classification = llm_result$suicide_analysis$intent_classification %||% "undetermined",
+      weapon_vs_escape = llm_result$suicide_analysis$weapon_vs_escape %||% "undetermined",
+      precipitating_factors = llm_result$suicide_analysis$precipitating_factors %||% character(),
+      confidence = llm_result$suicide_analysis$confidence %||% 0
+    )
+  }
+
+  # Add evidence items from matrix
+  if (!is.null(llm_result$evidence_matrix)) {
+    # Add physical evidence
+    if (!is.null(llm_result$evidence_matrix$physical_evidence)) {
+      for (evidence_item in llm_result$evidence_matrix$physical_evidence) {
+        forensic_result$add_evidence(
+          evidence_type = "physical_evidence",
+          evidence_item = evidence_item$item %||% "unknown",
+          weight = evidence_item$weight %||% 0.9,
+          source = paste0(narrative_type, "_forensic_analysis"),
+          reliability = evidence_item$reliability %||% 0.8
+        )
+      }
+    }
+
+    # Add behavioral evidence
+    if (!is.null(llm_result$evidence_matrix$behavioral_evidence)) {
+      for (evidence_item in llm_result$evidence_matrix$behavioral_evidence) {
+        forensic_result$add_evidence(
+          evidence_type = "behavioral_evidence",
+          evidence_item = evidence_item$item %||% "unknown",
+          weight = evidence_item$weight %||% 0.7,
+          source = paste0(narrative_type, "_forensic_analysis"),
+          reliability = evidence_item$reliability %||% 0.6
+        )
+      }
+    }
+
+    # Add contextual evidence
+    if (!is.null(llm_result$evidence_matrix$contextual_evidence)) {
+      for (evidence_item in llm_result$evidence_matrix$contextual_evidence) {
+        forensic_result$add_evidence(
+          evidence_type = "contextual_evidence",
+          evidence_item = evidence_item$item %||% "unknown",
+          weight = evidence_item$weight %||% 0.5,
+          source = paste0(narrative_type, "_forensic_analysis"),
+          reliability = evidence_item$reliability %||% 0.7
+        )
+      }
+    }
+  }
+
+  # Update temporal patterns
+  if (!is.null(llm_result$temporal_patterns)) {
+    forensic_result$update_temporal_patterns(
+      escalation_indicators = llm_result$temporal_patterns$escalation_indicators %||% character(),
+      timeline_events = llm_result$temporal_patterns$timeline_events %||% character(),
+      pattern_type = llm_result$temporal_patterns$pattern_type %||% "none",
+      confidence = llm_result$temporal_patterns$confidence %||% 0
+    )
+  }
+
+  # Update quality metrics
+  if (!is.null(llm_result$quality_metrics)) {
+    forensic_result$quality_metrics$data_completeness <- 
+      llm_result$quality_metrics$data_completeness %||% 0
+    forensic_result$quality_metrics$analysis_flags <- 
+      llm_result$quality_metrics$analysis_flags %||% character()
+    forensic_result$quality_metrics$overall_confidence <- 
+      llm_result$quality_metrics$overall_confidence %||% 0
+    forensic_result$quality_metrics$reviewer_notes <- list(
+      paste0(narrative_type, "_forensic: ", 
+             llm_result$quality_metrics$reviewer_notes %||% "")
+    )
+  }
+
+  forensic_result
 }
 

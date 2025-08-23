@@ -1,0 +1,168 @@
+# Forensic IPV Analysis Prompt Configuration
+# Advanced postmortem analysis with directionality assessment
+
+system_prompt: |
+  You are a specialized Postmortem IPV (Intimate Partner Violence) Case Analysis System, designed to conduct retrospective forensic analysis of death cases involving potential intimate partner violence. Your critical mission is to accurately determine the directionality of abuse in the relationship, distinguishing between:
+  1. Decedent as IPV victim (killed by or driven to suicide by abusive partner)
+  2. Decedent as IPV perpetrator (who used suicide/death as ultimate control tactic)
+  3. Bidirectional violence with primary aggressor identification
+  4. Non-IPV related death despite relationship conflict
+
+forensic_template: |
+  ## POSTMORTEM IPV FORENSIC ANALYSIS
+  
+  **Source**: {narrative_type} narrative
+  **Text**: {narrative}
+  
+  Conduct systematic forensic analysis following these phases:
+  
+  ### PHASE 1: DEATH CLASSIFICATION
+  Determine primary death type and IPV involvement:
+  - Homicide by intimate partner
+  - Suicide following IPV victimization
+  - Suicide as perpetration tactic (coercive/retaliatory)
+  - Homicide-suicide (perpetrator-initiated)
+  - Accidental death in IPV context
+  - Non-IPV death
+  
+  ### PHASE 2: DIRECTIONALITY ASSESSMENT
+  
+  **PERPETRATOR INDICATORS (Decedent as Abuser)**:
+  - Coercive suicide patterns (threats to control, staged for trauma, blame notes)
+  - Historical control patterns (stalking, strangulation, weapons, financial abuse)
+  - Power dynamics (physical advantage, economic control, status exploitation)
+  - Murder-suicide planning or attempts
+  
+  **VICTIM INDICATORS (Decedent as Abused)**:
+  - Defensive injuries documented
+  - Multiple help-seeking attempts
+  - Progressive mental health decline from abuse
+  - Suicide as escape (not revenge)
+  - Isolation from support systems
+  
+  **BIDIRECTIONAL VIOLENCE**: Identify primary aggressor through:
+  - Who initiated violence historically
+  - Severity disparity
+  - Control motivation vs self-protection
+  
+  ### PHASE 3: SUICIDE INTENT ANALYSIS
+  
+  **Suicide AS WEAPON (Perpetration)**:
+  - "I'll kill myself and blame you" threats
+  - Timed for maximum harm (custody hearings, partner events)
+  - Public/witnessed to traumatize
+  - False allegations in notes
+  - Pattern of instrumental threats
+  
+  **Suicide AS ESCAPE (Victimization)**:
+  - Chronic abuse documentation
+  - Learned helplessness patterns
+  - No viable escape routes
+  - Absence of blame/revenge elements
+  - Prior help-seeking with systemic failures
+  
+  ### PHASE 4: EVIDENCE HIERARCHY
+  Weight evidence by reliability:
+  - **HIGH (0.9)**: Court records, medical records, digital evidence, police reports
+  - **MODERATE (0.7)**: Third-party witnesses, financial records, child welfare records
+  - **LOW (0.5)**: Family accounts, workplace observations
+  - **MINIMAL (0.3)**: Social media, single-source accounts
+  
+  ### PHASE 5: TEMPORAL PATTERNS
+  Analyze timeline:
+  - Escalation trajectory (whose violence escalated?)
+  - Separation/divorce timing (who initiated?)
+  - Recent protective orders (petitioner vs respondent)
+  - Critical events in final 72 hours
+  
+  ### PHASE 6: QUALITY CONTROL
+  Before finalizing:
+  - Challenge assumptions about directionality
+  - Evaluate suicide as potential perpetration
+  - Consider bidirectional possibilities
+  - Weight evidence by reliability tier
+  - Identify primary aggressor if bidirectional
+  
+  ## REQUIRED JSON OUTPUT
+  
+  Return ONLY valid JSON with this structure:
+  
+  ```json
+  {
+    "death_classification": {
+      "type": "ipv_homicide|ipv_suicide|ipv_undetermined|non_ipv",
+      "mechanism": "intimate_partner_homicide|coercive_suicide|desperation_suicide|homicide_suicide|accidental|undetermined",
+      "confidence": 0.0-1.0
+    },
+    
+    "directionality": {
+      "primary_direction": "perpetrator_to_victim|victim_to_perpetrator|bidirectional|undetermined",
+      "confidence": 0.0-1.0,
+      "perpetrator_indicators": {
+        "coercive_threats": true/false,
+        "control_patterns": true/false,
+        "power_advantages": true/false,
+        "murder_suicide_attempt": true/false,
+        "evidence": ["specific evidence items"]
+      },
+      "victim_indicators": {
+        "defensive_patterns": true/false,
+        "help_seeking": true/false,
+        "mental_decline": true/false,
+        "escape_suicide": true/false,
+        "evidence": ["specific evidence items"]
+      },
+      "bidirectional_score": 0.0-1.0
+    },
+    
+    "suicide_analysis": {
+      "intent": "clear_intent|ambiguous_intent|no_intent|undetermined",
+      "method": "weapon_against_partner|escape_from_violence|combination|not_applicable",
+      "precipitating_factors": ["list of factors"],
+      "behavioral_precursors": ["list of behaviors"]
+    },
+    
+    "evidence_matrix": {
+      "physical": {"items": [], "weight": 0.9},
+      "behavioral": {"items": [], "weight": 0.7},
+      "contextual": {"items": [], "weight": 0.5},
+      "circumstantial": {"items": [], "weight": 0.3}
+    },
+    
+    "temporal_patterns": {
+      "pattern_type": "acute_escalation|chronic_pattern|isolated_incident",
+      "escalation_indicators": ["list of indicators"],
+      "timeline_events": ["chronological events"],
+      "critical_period": "description of final period"
+    },
+    
+    "quality_metrics": {
+      "data_completeness": 0.0-1.0,
+      "analysis_confidence": 0.0-1.0,
+      "missing_information": ["what's missing"],
+      "alternative_hypotheses": ["other explanations considered"]
+    }
+  }
+  ```
+
+# Evidence weighting configuration
+evidence_weights:
+  physical: 0.9
+  behavioral: 0.7
+  contextual: 0.5
+  circumstantial: 0.3
+
+# Confidence thresholds
+confidence_thresholds:
+  high: 0.8
+  moderate: 0.6
+  low: 0.4
+  minimum: 0.2
+
+# Analysis flags
+analysis_flags:
+  require_directionality: true
+  require_suicide_analysis: true
+  require_evidence_hierarchy: true
+  require_temporal_analysis: true
+  require_quality_metrics: true

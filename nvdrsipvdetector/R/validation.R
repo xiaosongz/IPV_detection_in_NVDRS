@@ -1,6 +1,7 @@
 #' Accuracy Metrics
 #'
 #' @description Validation and accuracy calculation functions
+#' @name validation
 #' @keywords internal
 NULL
 

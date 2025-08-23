@@ -7,8 +7,10 @@ api:
   max_tokens: 10000
   
 prompts:
-  system: "You are an expert at analyzing death investigation narratives for indicators of intimate partner violence. Respond only with valid JSON containing: ipv_detected (boolean), confidence (0-1), indicators (array), and rationale (string)."
-  json_instruction: "Return ONLY valid JSON. No additional text or formatting."
+  system: "You are a forensic death investigation analyst specializing in intimate partner violence cases. Conduct systematic analysis through multiple phases: death classification, directionality assessment, suicide analysis, evidence hierarchy, temporal patterns, and quality control. Respond only with valid JSON."
+  json_instruction: "Return ONLY valid JSON. No additional text, explanations, or formatting outside the JSON structure."
+  
+  # Simple template for basic compatibility
   unified_template: |
     Analyze this {narrative_type} narrative for intimate partner violence indicators.
     
@@ -35,14 +37,120 @@ prompts:
       'rationale': '...'
     }}
   
+  # Advanced forensic analysis template
+  forensic_template: |
+    POSTMORTEM IPV CASE ANALYSIS SYSTEM
+    ===================================
+    
+    Conduct systematic forensic analysis of this {narrative_type} narrative through 6 phases:
+    
+    PHASE 1: DEATH CLASSIFICATION
+    Determine: ipv_homicide | ipv_suicide | ipv_undetermined | non_ipv
+    Evidence: physical injuries, weapon, scene, witness statements
+    Confidence: Rate 0-1 based on evidence strength
+    
+    PHASE 2: DIRECTIONALITY ASSESSMENT  
+    Primary direction: perpetrator_to_victim | victim_to_perpetrator | bidirectional | undetermined
+    Perpetrator indicators: control, threats, weapon ownership, history of violence
+    Victim indicators: defensive wounds, help-seeking, protection orders, fear expressions
+    Bidirectional score: 0-1 (0=unidirectional, 1=mutual violence)
+    
+    PHASE 3: SUICIDE ANALYSIS (if applicable)
+    Intent: clear_intent | ambiguous_intent | no_intent | undetermined
+    Method type: weapon_against_partner | escape_from_violence | combination | undetermined
+    Key indicators: notes, previous attempts, method lethality, timing with IPV events
+    
+    PHASE 4: EVIDENCE HIERARCHY & WEIGHTING
+    Physical evidence (weight 0.9): injuries, DNA, weapons, scene
+    Behavioral evidence (weight 0.7): threats, stalking, control patterns
+    Contextual evidence (weight 0.5): witnesses, history, circumstances
+    Circumstantial evidence (weight 0.3): assumptions, inferences
+    
+    PHASE 5: TEMPORAL PATTERN ANALYSIS
+    Pattern type: acute_escalation | chronic_pattern | isolated_incident | none
+    Escalation indicators: recent separation, custody disputes, new relationships
+    Timeline: sequence of events leading to death
+    
+    PHASE 6: QUALITY CONTROL
+    Data completeness: Rate narrative detail sufficiency 0-1
+    Analysis flags: Missing information, contradictions, ambiguities
+    Confidence calibration: Overall analysis confidence 0-1
+    
+    NARRATIVE TEXT:
+    '{narrative}'
+    
+    ANALYSIS INSTRUCTIONS:
+    - Analyze ONLY information explicitly stated in narrative
+    - Do NOT infer beyond available evidence
+    - Weight physical evidence most heavily
+    - Consider alternative explanations
+    - Flag uncertainties and gaps
+    
+    RESPOND WITH STRUCTURED JSON:
+    {{
+      "death_classification": {{
+        "primary": "[classification]",
+        "confidence": 0.0-1.0,
+        "supporting_evidence": ["evidence1", "evidence2"],
+        "rationale": "Brief explanation"
+      }},
+      "directionality": {{
+        "primary_direction": "[direction]",
+        "perpetrator_indicators": ["indicator1", "indicator2"],
+        "victim_indicators": ["indicator1", "indicator2"],
+        "bidirectional_score": 0.0-1.0,
+        "confidence": 0.0-1.0
+      }},
+      "suicide_analysis": {{
+        "intent_classification": "[intent]",
+        "weapon_vs_escape": "[method_type]",
+        "precipitating_factors": ["factor1", "factor2"],
+        "confidence": 0.0-1.0
+      }},
+      "evidence_matrix": {{
+        "physical_evidence": [{{"item": "evidence", "weight": 0.9, "reliability": 0.8}}],
+        "behavioral_evidence": [{{"item": "evidence", "weight": 0.7, "reliability": 0.6}}],
+        "contextual_evidence": [{{"item": "evidence", "weight": 0.5, "reliability": 0.7}}],
+        "total_weight_score": 0.0-1.0
+      }},
+      "temporal_patterns": {{
+        "pattern_type": "[pattern]",
+        "escalation_indicators": ["indicator1", "indicator2"],
+        "timeline_events": ["event1", "event2"],
+        "confidence": 0.0-1.0
+      }},
+      "quality_metrics": {{
+        "data_completeness": 0.0-1.0,
+        "analysis_flags": ["flag1", "flag2"],
+        "overall_confidence": 0.0-1.0,
+        "reviewer_notes": "Any important observations or limitations"
+      }}
+    }}
+  
 processing:
   batch_size: 50
   checkpoint_every: 100
+  use_forensic_analysis: true  # Enable advanced forensic mode
+  max_narrative_tokens: 6000   # Max tokens for narrative input
+  max_response_tokens: 4000    # Max tokens for LLM response
+  forensic_prompt_file: "forensic_prompt.yml"  # Path to forensic prompt config
   
 weights:
   cme: 0.6
   le: 0.4
   threshold: 0.7
+  # Forensic analysis weights
+  forensic_weights:
+    physical_evidence: 0.9
+    behavioral_evidence: 0.7
+    contextual_evidence: 0.5
+    circumstantial_evidence: 0.3
+  # Confidence thresholds for forensic classifications
+  forensic_thresholds:
+    high_confidence: 0.8
+    moderate_confidence: 0.6
+    low_confidence: 0.4
+    minimum_viable: 0.2
 
 database:
   path: "logs/api_logs.sqlite"
