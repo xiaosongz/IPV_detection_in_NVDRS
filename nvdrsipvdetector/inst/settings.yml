@@ -9,26 +9,21 @@ api:
 prompts:
   system: "You are an expert at analyzing death investigation narratives for indicators of intimate partner violence. Respond only with valid JSON containing: ipv_detected (boolean), confidence (0-1), indicators (array), and rationale (string)."
   json_instruction: "Return ONLY valid JSON. No additional text or formatting."
-  le_template: |
-    Analyze this law enforcement narrative for intimate partner violence indicators.
+  unified_template: |
+    Analyze this {narrative_type} narrative for intimate partner violence indicators.
     
-    Look for: domestic violence, current/former partners, restraining orders, 
-    jealousy, control, separation, threats between partners.
+    Look for ALL potential IPV indicators:
     
-    Narrative: '{narrative}'
+    Behavioral/Social: domestic violence history, current/former intimate partners, 
+    restraining orders, stalking, jealousy, control, recent separation/breakup, 
+    threats between partners, custody disputes, financial control.
     
-    Respond with JSON:
-    {{
-      'ipv_detected': boolean,
-      'confidence': 0-1,
-      'indicators': [...],
-      'rationale': '...'
-    }}
-  cme_template: |
-    Analyze this medical examiner narrative for intimate partner violence indicators.
+    Physical/Medical: multiple injuries in various stages of healing, defensive wounds, 
+    strangulation marks, pattern injuries consistent with objects, genital trauma, 
+    history of prior unexplained injuries, injuries inconsistent with stated cause.
     
-    Look for: multiple injuries in various stages, defensive wounds, 
-    strangulation, pattern injuries, history of prior injuries.
+    Contextual: weapon belonging to partner, incident at shared residence, 
+    witness accounts of relationship conflict, suicide notes mentioning partner.
     
     Narrative: '{narrative}'
     

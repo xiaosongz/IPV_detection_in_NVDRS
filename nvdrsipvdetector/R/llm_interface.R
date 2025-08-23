@@ -112,13 +112,12 @@ create_error_response <- function(error) {
 #' @return Formatted prompt
 #' @export
 build_prompt <- function(narrative, type = "LE", config = NULL) {
-  # Input validation using tidyverse style
+  # Input validation
   if (is.null(config)) {
-    # Use default test prompts for backward compatibility
+    # Use default test prompt for backward compatibility
     config <- list(
       prompts = list(
-        le_template = "Based on the following law enforcement narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}",
-        cme_template = "Based on the following medical examiner narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}"
+        unified_template = "Analyze this {narrative_type} narrative for intimate partner violence indicators. Narrative: {narrative}"
       )
     )
   }
@@ -130,23 +129,30 @@ build_prompt <- function(narrative, type = "LE", config = NULL) {
   # Clean narrative text
   narrative <- stringr::str_trim(narrative)
   
-  # Get template based on type
-  template <- if (type == "LE") {
-    if (!is.null(config$prompts$le_template)) {
-      config$prompts$le_template
+  # Get unified template
+  template <- config$prompts$unified_template
+  
+  # Check for backward compatibility - if old templates exist but no unified
+  if (is.null(template)) {
+    # Try old style templates for backward compatibility
+    if (type == "LE" && !is.null(config$prompts$le_template)) {
+      template <- config$prompts$le_template
+    } else if (type == "CME" && !is.null(config$prompts$cme_template)) {
+      template <- config$prompts$cme_template
     } else {
-      stop("LE template not found in configuration. Please add 'le_template' to the 'prompts' section in inst/settings.yml")
-    }
-  } else if (type == "CME") {
-    if (!is.null(config$prompts$cme_template)) {
-      config$prompts$cme_template
-    } else {
-      stop("CME template not found in configuration. Please add 'cme_template' to the 'prompts' section in inst/settings.yml")
+      stop("No unified_template found in configuration. Please update inst/settings.yml")
     }
   } else {
+    # Use unified template - replace narrative type placeholder
+    narrative_type <- if (type == "LE") "law enforcement" else "medical examiner"
+    template <- stringr::str_replace_all(template, "\\{narrative_type\\}", narrative_type)
+  }
+  
+  # Validate narrative type
+  if (!type %in% c("LE", "CME")) {
     stop(paste("Invalid narrative type:", type, ". Must be 'LE' or 'CME'"))
   }
   
-  # Replace placeholder with actual narrative using stringr
+  # Replace narrative placeholder
   stringr::str_replace_all(template, "\\{narrative\\}", narrative)
 }
