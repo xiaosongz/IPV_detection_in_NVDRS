@@ -1,6 +1,8 @@
 # nvdrs_ipv_detector Package Specification
 
 ## Critical Rules
+- No lose files, test files should be saved under project dir \test
+- summary and notes shoud be saved under \docs
 - Use trimws() on ALL text inputs to remove trailing spaces
 - NEVER store API keys in code - use environment variables
 - ALL functions must use explicit namespaces (httr2::request, not library())
