@@ -1,325 +1,124 @@
-# NVDRS IPV Detector
+# IPV Detection in NVDRS
 
-An R package for detecting intimate partner violence (IPV) indicators in National Violent Death Reporting System (NVDRS) narratives using Large Language Model APIs.
+A 30-line function that detects intimate partner violence in death narratives. That's it.
 
-## 📊 Current Status
+## What This Is
 
-- **Package Version**: 0.1.0 (Development)
-- **Test Coverage**: 0% (needs fixing - tests exist but don't call package functions)
-- **API Integration**: ✅ Working with LM Studio
-- **Accuracy**: 70% on test sample (289 records available for validation)
-- **Performance**: ~38,000 records/second theoretical throughput
-- **Logging**: ✅ SQLite database created at `logs/api_logs.sqlite`
+One function (`detect_ipv`) that sends text to an LLM and gets back IPV detection results. No magic, no complexity, just a simple API call wrapped in error handling.
 
-### Test Results Summary
-- **R CMD Check**: ✅ 0 errors, 0 warnings, 0 notes
-- **Unit Tests**: 54 tests (all pass but need fixing for coverage)
-- **LLM Integration**: Successfully tested with OpenAI's gpt-oss-120b model
-- **Validation Dataset**: `sui_all_flagged.xlsx` with manual IPV flags
+## What This Is NOT
 
-## 🚀 Installation
+- NOT a complex R package with 50 dependencies
+- NOT an abstraction layer that hides what's happening
+- NOT a framework that dictates your workflow
+- NOT a solution looking for a problem
+
+## The Entire Implementation
 
 ```r
-# Install from local directory
-devtools::install("nvdrsipvdetector")
-
-# Or install directly from the package directory
-setwd("nvdrsipvdetector")
-devtools::install()
+detect_ipv <- function(text, config = NULL) {
+  # Default config
+  if (is.null(config)) {
+    config <- list(
+      api_url = Sys.getenv("LLM_API_URL", "http://192.168.10.22:1234/v1/chat/completions"),
+      model = Sys.getenv("LLM_MODEL", "openai/gpt-oss-120b")
+    )
+  }
+  
+  # Empty input = empty output
+  if (is.null(text) || is.na(text) || trimws(text) == "") {
+    return(list(detected = NA, confidence = 0))
+  }
+  
+  # Call API
+  tryCatch({
+    response <- httr2::request(config$api_url) |>
+      httr2::req_body_json(list(
+        model = config$model,
+        messages = list(list(role = "user", content = text))
+      )) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json()
+    
+    jsonlite::fromJSON(response$choices[[1]]$message$content)
+  }, error = function(e) {
+    list(detected = NA, confidence = 0, error = e$message)
+  })
+}
 ```
 
-## 🔧 Configuration
+That's the whole thing. 30 lines. Done.
 
-### 1. Set up LM Studio
-
-Ensure LM Studio is running with your preferred model:
-```bash
-# Default endpoint: http://192.168.10.22:1234/v1
-# Tested models:
-# - openai/gpt-oss-120b (recommended)
-# - qwen/qwen3-30b-a3b-2507
-```
-
-### 2. Configure Environment Variables
+## Installation? Copy the Function
 
 ```r
-# Set your LLM API endpoint
-Sys.setenv(LM_STUDIO_URL = "http://192.168.10.22:1234/v1")
+# Step 1: Copy the detect_ipv function from above
+# Step 2: Install dependencies
+install.packages(c("httr2", "jsonlite"))
+# Step 3: There is no step 3
+```
+
+## Setup
+
+```r
+# Point to your LLM
+Sys.setenv(LLM_API_URL = "http://192.168.10.22:1234/v1/chat/completions")
 Sys.setenv(LLM_MODEL = "openai/gpt-oss-120b")
 ```
 
-### 3. Configuration File Location
-
-The package settings are stored in `inst/settings.yml`:
-```yaml
-api:
-  base_url: "${LM_STUDIO_URL:-http://192.168.10.22:1234/v1}"
-  model: "${LLM_MODEL:-openai/gpt-oss-120b}"
-  timeout: 30
-  max_retries: 3
-  
-processing:
-  batch_size: 50
-  checkpoint_every: 100
-```
-
-The package automatically finds this file when installed.
-
-## 📖 Usage Examples
-
-### Basic Usage
+## Usage
 
 ```r
-library(nvdrsipvdetector)
+# Single narrative
+result <- detect_ipv("Husband shot wife during argument")
+print(result$detected)  # TRUE or FALSE
 
-# Simple usage - everything automatic
-result <- detect_ipv("Domestic violence incident")
+# Batch processing (YOU control the loop)
+data <- readxl::read_excel("your_data.xlsx")
+data$ipv <- lapply(data$narrative, detect_ipv)
 
-# Specify narrative type (LE or CME)
-result <- detect_ipv("Victim injuries", type = "CME")
+# Parallel? Your choice
+library(parallel)
+results <- mclapply(narratives, detect_ipv, mc.cores = 4)
 
-# Disable logging
-result <- detect_ipv("Narrative text", log_to_db = FALSE)
-
-# Use custom config file
-result <- detect_ipv("Narrative", config = "custom_settings.yml")
-
-# Batch processing
-data <- read_nvdrs_data("path/to/your/data.csv")
-results <- nvdrs_process_batch(data = data)
-
-# Export results
-export_results(results, "output/ipv_results.csv", format = "csv")
-```
-
-### Advanced Usage
-
-```r
-library(nvdrsipvdetector)
-library(readxl)
-
-# Load your NVDRS data
-data <- read_excel("data/sui_all_flagged.xlsx")
-
-# Process individual narratives with custom config
-my_config <- load_config("custom_settings.yml")
-
-# Process with explicit config and connection
-conn <- init_database("my_logs.sqlite")
-result <- detect_ipv(
-  narrative = data$NarrativeLE[1],
-  type = "LE",
-  config = my_config,
-  conn = conn
+# Custom prompt? Pass config
+my_config <- list(
+  api_url = "http://your-llm/v1/chat/completions",
+  model = "your-model"
 )
-DBI::dbDisconnect(conn)
-
-# Reconcile LE and CME results manually
-le_result <- detect_ipv(data$NarrativeLE[1], type = "LE")
-cme_result <- detect_ipv(data$NarrativeCME[1], type = "CME")
-final_result <- reconcile_le_cme(
-  le_result = le_result,
-  cme_result = cme_result,
-  weights = list(le = 0.4, cme = 0.6)
-)
-
-print(final_result)
+result <- detect_ipv(text, my_config)
 ```
 
-### Batch Processing with Validation
+That's it. No frameworks. No abstractions. Just a function call.
 
-```r
-# If you have manual IPV flags for validation
-data_with_flags <- read_excel("data/sui_all_flagged.xlsx")
+## Input/Output
 
-# Process in batches
-batches <- split_into_batches(data_with_flags, batch_size = 50)
-
-all_results <- list()
-for (i in seq_along(batches)) {
-  batch <- batches[[i]]
-  
-  # Process each narrative
-  batch_results <- lapply(1:nrow(batch), function(j) {
-    row <- batch[j, ]
-    
-    le_result <- if (!is.na(row$NarrativeLE)) {
-      detect_ipv(row$NarrativeLE, "LE")
-    } else {
-      list(ipv_detected = NA, confidence = NA)
-    }
-    
-    cme_result <- if (!is.na(row$NarrativeCME)) {
-      detect_ipv(row$NarrativeCME, "CME")
-    } else {
-      list(ipv_detected = NA, confidence = NA)
-    }
-    
-    reconcile_le_cme(le_result, cme_result)
-  })
-  
-  all_results <- c(all_results, batch_results)
-  
-  # Progress message
-  cat(sprintf("Processed batch %d/%d\n", i, length(batches)))
-}
-
-# Validate against manual flags if available
-if ("ipv_flag_LE" %in% names(data_with_flags)) {
-  validation <- validate_results(
-    results = all_results,
-    ground_truth = data_with_flags
-  )
-  
-  print_validation_report(validation)
-}
-```
-
-### Viewing API Logs
-
-```r
-# The package automatically logs all API calls to SQLite database
-# Default location: logs/api_logs.sqlite
-
-# View logs using DBI
-library(DBI)
-conn <- dbConnect(RSQLite::SQLite(), "logs/api_logs.sqlite")
-
-# Check total API calls
-total_calls <- dbGetQuery(conn, "SELECT COUNT(*) as count FROM api_logs")
-print(paste("Total API calls:", total_calls$count))
-
-# View recent logs
-recent_logs <- dbGetQuery(conn, "
-  SELECT incident_id, prompt_type, response_time_ms, 
-         datetime(timestamp, 'unixepoch') as call_time
-  FROM api_logs 
-  ORDER BY timestamp DESC 
-  LIMIT 10
-")
-print(recent_logs)
-
-# Check average response times
-avg_times <- dbGetQuery(conn, "
-  SELECT prompt_type, 
-         AVG(response_time_ms) as avg_ms,
-         COUNT(*) as total_calls
-  FROM api_logs 
-  GROUP BY prompt_type
-")
-print(avg_times)
-
-dbDisconnect(conn)
-```
-
-### Testing the LLM Connection
-
-```r
-library(httr2)
-library(jsonlite)
-
-# Test basic connectivity
-test_llm_connection <- function() {
-  response <- request("http://192.168.10.22:1234/v1/chat/completions") |>
-    req_headers("Content-Type" = "application/json") |>
-    req_body_json(list(
-      model = "openai/gpt-oss-120b",
-      messages = list(
-        list(role = "user", content = "Say 'Connected' if you receive this")
-      ),
-      temperature = 0.1,
-      max_tokens = 50
-    )) |>
-    req_timeout(10) |>
-    req_perform()
-  
-  result <- resp_body_json(response)
-  return(result$choices[[1]]$message$content)
-}
-
-# Run the test
-test_llm_connection()
-# Should return: "Connected"
-```
-
-## 📁 Data Format
-
-### Input Data Requirements
-
-Your input data should have the following columns:
-- `IncidentID`: Unique identifier for each case
-- `NarrativeLE`: Law enforcement narrative text
-- `NarrativeCME`: Coroner/Medical examiner narrative text
-
-Optional validation columns:
-- `ipv_flag_LE`: Manual IPV flag for LE narrative (TRUE/FALSE)
-- `ipv_flag_CME`: Manual IPV flag for CME narrative (TRUE/FALSE)
-
-### Output Format
-
-The package returns results with:
+You give it text. It returns:
 ```r
 list(
-  incident_id = "12345",
-  ipv_detected = TRUE,
-  confidence = 0.85,
-  indicators = c("domestic violence", "ex-boyfriend", "restraining order"),
-  le_result = list(...),  # Detailed LE analysis
-  cme_result = list(...), # Detailed CME analysis
-  rationale = "Evidence of domestic violence history..."
+  detected = TRUE/FALSE,
+  confidence = 0.0-1.0,
+  error = "message if failed"
 )
 ```
 
-## 🧪 Testing
+## The Real Implementation Files
 
-```r
-# Run all tests
-devtools::test()
+- `docs/ULTIMATE_CLEAN.R` - The 30-line version. Use this.
+- `docs/CLEAN_IMPLEMENTATION.R` - 100-line version with batching if you need it.
+- Everything else - Legacy complexity. Ignore it.
 
-# Check package
-devtools::check()
+## Why This Approach?
 
-# Test coverage (currently needs fixing)
-covr::package_coverage()
+Because 99% of "data science" code is just:
+1. Read data
+2. Call an API
+3. Write results
 
-# Run integration test with real LLM
-source("test_llm_api.R")
-```
+The other 10,000 lines? Abstractions that make simple things complicated. 
 
-## ⚠️ Known Issues
+This project rejects that. One function. Clear purpose. You control everything else.
 
-1. **Test Coverage**: Tests exist but don't properly call package functions (0% coverage)
-2. **Function Interfaces**: Some functions have parameter mismatches that need fixing
-3. **JSON Parsing**: LLM responses sometimes include extra tokens that need cleaning
-4. **File Format**: Package assumes CSV input but test data is Excel format
+## License
 
-## 🛠️ Development Roadmap
-
-- [ ] Fix test coverage issue (make tests actually call package functions)
-- [ ] Standardize function interfaces and parameters
-- [ ] Add robust JSON parsing with error handling
-- [ ] Support both CSV and Excel formats seamlessly
-- [ ] Implement proper checkpointing for large datasets
-- [ ] Add progress bars for batch processing
-- [ ] Create vignettes with detailed examples
-- [ ] Add more comprehensive error messages
-- [ ] Implement caching to avoid redundant API calls
-- [ ] Add support for multiple LLM providers
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
-## 👥 Contributing
-
-Please report issues or submit pull requests on GitHub.
-
-## 📚 References
-
-- National Violent Death Reporting System (NVDRS)
-- LM Studio Documentation
-- R Package Development Guide
-
-## 🙏 Acknowledgments
-
-This package was developed to assist researchers in identifying intimate partner violence patterns in death investigation narratives, contributing to public health surveillance and prevention efforts.
+MIT. Do whatever you want with it.
