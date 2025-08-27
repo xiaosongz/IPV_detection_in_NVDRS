@@ -1,0 +1,15 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.git$
+^\.gitignore$
+^\.DS_Store$
+^docs$
+^data-raw$
+^logs$
+^results$
+^scripts$
+^\.claude$
+^CLAUDE\.md$
+^CLAUDE\.local\.md$
+^README\.md$
+^LICENSE\.md$
