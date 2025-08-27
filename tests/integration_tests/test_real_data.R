@@ -44,9 +44,8 @@ test_config <- list(
     path = "test_api_logs.sqlite"
   ),
   prompts = list(
-    system = "You are an AI assistant trained to detect intimate partner violence (IPV) in death investigation narratives.",
-    le_template = "Based on the following law enforcement narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}",
-    cme_template = "Based on the following medical examiner narrative, determine if there are indicators of intimate partner violence (IPV). Narrative: {narrative}"
+    system = "You are an AI assistant trained to detect intimate partner violence (IPV) in death investigation narratives. Provide your response as a JSON object with the following fields: ipv_detected (boolean), confidence (number 0-1), indicators (array of strings), and rationale (string).",
+    unified_template = "Based on the following {narrative_type} narrative, determine if there are indicators of intimate partner violence (IPV). Analyze for patterns of domestic violence, controlling behavior, threats, or history of abuse. Respond with JSON format only. Narrative: {narrative}"
   )
 )
 
@@ -133,30 +132,37 @@ sample_csv_path <- "test_sample.csv"
 readr::write_csv(test_sample, sample_csv_path)
 cli::cli_alert_success("Test sample saved to {sample_csv_path}")
 
-# Run the detection with mock mode (no actual API calls)
-cli::cli_h2("Running IPV Detection")
+# Run the detection with actual API calls
+cli::cli_h2("Running IPV Detection with Real API")
 
-# Create mock LLM function for testing
-mock_llm_response <- function(prompt, config) {
-  # Simulate API response based on keywords
-  narrative <- tolower(prompt)
-  
-  # Keywords indicating IPV
-  ipv_keywords <- c("domestic", "partner", "spouse", "girlfriend", "boyfriend", 
-                    "restraining order", "intimate", "relationship", "abuse")
-  
-  has_ipv <- any(sapply(ipv_keywords, function(kw) grepl(kw, narrative)))
-  
-  list(
-    ipv_detected = has_ipv,
-    confidence = if(has_ipv) runif(1, 0.7, 0.95) else runif(1, 0.1, 0.3),
-    indicators = if(has_ipv) sample(ipv_keywords, min(3, sum(sapply(ipv_keywords, function(kw) grepl(kw, narrative))))) else character(0),
-    rationale = if(has_ipv) "Mock: IPV indicators detected" else "Mock: No IPV indicators found"
-  )
+# Ensure API configuration is properly set
+if (is.null(test_config$api$base_url) || test_config$api$base_url == "") {
+  cli::cli_alert_warning("API base URL not configured, using environment variable or default")
+  test_config$api$base_url <- Sys.getenv("LM_STUDIO_URL", "http://192.168.10.22:1234/v1")
+}
+
+cli::cli_alert_info("Using API endpoint: {test_config$api$base_url}")
+cli::cli_alert_info("Using model: {test_config$api$model}")
+
+# Test API connection first
+cli::cli_alert_info("Testing API connection...")
+test_prompt <- build_prompt("Test connection", type = "LE", config = test_config)
+test_response <- tryCatch({
+  send_to_llm(test_prompt, test_config)
+}, error = function(e) {
+  cli::cli_alert_danger("Failed to connect to API: {e$message}")
+  cli::cli_alert_info("Please ensure the LLM API is running at {test_config$api$base_url}")
+  stop("API connection failed")
+})
+
+if (!is.null(test_response$success) && test_response$success) {
+  cli::cli_alert_success("API connection successful!")
+} else {
+  cli::cli_alert_warning("API connection returned unexpected response")
 }
 
 # Run detection on sample
-cli::cli_alert_info("Processing narratives...")
+cli::cli_alert_info("Processing narratives with real API...")
 
 results <- tibble::tibble()
 errors <- character()
@@ -170,19 +176,34 @@ for (i in 1:sample_size) {
   
   # Skip if both narratives are missing
   if (is.na(row$NarrativeLE) && is.na(row$NarrativeCME)) {
+    cli::cli_alert_warning("Skipping IncidentID {row$IncidentID}: No narratives available")
     next
   }
   
   # Process LE narrative
   le_result <- NULL
   if (!is.na(row$NarrativeLE) && nchar(trimws(row$NarrativeLE)) > 0) {
-    le_result <- mock_llm_response(row$NarrativeLE, test_config)
+    cli::cli_alert_info("Processing LE narrative for IncidentID {row$IncidentID}")
+    tryCatch({
+      le_prompt <- build_prompt(row$NarrativeLE, type = "LE", config = test_config)
+      le_result <- send_to_llm(le_prompt, test_config)
+    }, error = function(e) {
+      cli::cli_alert_warning("Failed to process LE narrative for {row$IncidentID}: {e$message}")
+      errors <- c(errors, paste("LE", row$IncidentID, e$message))
+    })
   }
   
   # Process CME narrative  
   cme_result <- NULL
   if (!is.na(row$NarrativeCME) && nchar(trimws(row$NarrativeCME)) > 0) {
-    cme_result <- mock_llm_response(row$NarrativeCME, test_config)
+    cli::cli_alert_info("Processing CME narrative for IncidentID {row$IncidentID}")
+    tryCatch({
+      cme_prompt <- build_prompt(row$NarrativeCME, type = "CME", config = test_config)
+      cme_result <- send_to_llm(cme_prompt, test_config)
+    }, error = function(e) {
+      cli::cli_alert_warning("Failed to process CME narrative for {row$IncidentID}: {e$message}")
+      errors <- c(errors, paste("CME", row$IncidentID, e$message))
+    })
   }
   
   # Reconcile results
@@ -221,6 +242,17 @@ for (i in 1:sample_size) {
 
 cli::cli_progress_done(id = pb)
 cli::cli_alert_success("Processed {nrow(results)} records")
+
+# Report any errors
+if (length(errors) > 0) {
+  cli::cli_alert_warning("Encountered {length(errors)} errors during processing")
+  # Ensure logs directory exists
+  if (!dir.exists("logs")) {
+    dir.create("logs", showWarnings = FALSE)
+  }
+  cli::cli_text("Error details saved to logs/test_errors.log")
+  writeLines(errors, "logs/test_errors.log")
+}
 
 # Display results summary
 cli::cli_h2("Results Summary")
@@ -278,12 +310,24 @@ if (validation_available && length(manual_flag_cols) > 0) {
 # Save results
 cli::cli_h2("Saving Results")
 
-output_path <- "test_results.csv"
+# Ensure results directory exists
+if (!dir.exists("results")) {
+  dir.create("results", showWarnings = FALSE)
+}
+
+output_path <- "results/test_results.csv"
 readr::write_csv(results, output_path)
 cli::cli_alert_success("Results saved to {output_path}")
 
 # Save detailed report
-report_path <- "test_report.txt"
+# Ensure docs/reports directory exists
+if (!dir.exists("docs")) {
+  dir.create("docs", showWarnings = FALSE)
+}
+if (!dir.exists("docs/reports")) {
+  dir.create("docs/reports", showWarnings = FALSE)
+}
+report_path <- "docs/reports/test_report.txt"
 sink(report_path)
 cat("NVDRS IPV Detector Test Report\n")
 cat("===============================\n\n")
@@ -317,3 +361,6 @@ cli::cli_text("  - {output_path}: Detection results in CSV format")
 cli::cli_text("  - {report_path}: Detailed text report")
 cli::cli_text("  - {sample_csv_path}: Test sample data")
 cli::cli_text("  - {config_path}: Test configuration")
+if (length(errors) > 0) {
+  cli::cli_text("  - logs/test_errors.log: Error details")
+}

@@ -68,3 +68,4 @@ test_that("reconcile_results handles missing narratives", {
   expect_equal(reconciled$ipv_detected[3], FALSE)
   expect_equal(reconciled$confidence[3], 0.3)
 })
+

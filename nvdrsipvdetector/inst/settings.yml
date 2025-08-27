@@ -39,93 +39,73 @@ prompts:
   
   # Advanced forensic analysis template
   forensic_template: |
-    SYSTEMATIC IPV FORENSIC ANALYSIS
-    ================================
+    Analyze this death investigation narrative for intimate partner violence (IPV).
     
-    Conduct systematic forensic analysis of this {narrative_type} narrative through 6 phases:
+    ANALYSIS TASKS:
     
-    PHASE 1: DEATH CLASSIFICATION
-    Determine: ipv_homicide | ipv_suicide | ipv_undetermined | non_ipv
-    Evidence: physical injuries, weapon, scene, witness statements
-    Confidence: Rate 0-1 based on evidence strength
+    1. IPV DETECTION
+    Identify ANY indicators of intimate partner violence:
+    - Physical: injuries, strangulation, assault, defensive wounds
+    - Sexual: forced acts, reproductive coercion
+    - Psychological: threats, stalking, isolation, control
+    - Economic: financial control, property damage
+    - Weapons: firearm access/threats, weapon use
     
-    PHASE 2: DIRECTIONALITY ASSESSMENT  
-    Primary direction: perpetrator_to_victim | victim_to_perpetrator | bidirectional | undetermined
-    Perpetrator indicators: control, threats, weapon ownership, history of violence
-    Victim indicators: defensive wounds, help-seeking, protection orders, fear expressions
-    Bidirectional score: 0-1 (0=unidirectional, 1=mutual violence)
+    2. DEATH ANALYSIS (if IPV present)
+    - Death type: homicide/suicide/undetermined
+    - Who died: victim/perpetrator/both
+    - Primary aggressor: decedent/partner/mutual/unclear
     
-    PHASE 3: SUICIDE ANALYSIS (if applicable)
-    Intent: clear_intent | ambiguous_intent | no_intent | undetermined
-    Method type: weapon_against_partner | escape_from_violence | combination | undetermined
-    Key indicators: notes, previous attempts, method lethality, timing with IPV events
+    3. KEY EVIDENCE
+    - Most critical evidence supporting IPV determination
+    - Evidence quality: direct/indirect/circumstantial
     
-    PHASE 4: EVIDENCE HIERARCHY & WEIGHTING
-    Physical evidence (weight 0.9): injuries, DNA, weapons, scene
-    Behavioral evidence (weight 0.7): threats, stalking, control patterns
-    Contextual evidence (weight 0.5): witnesses, history, circumstances
-    Circumstantial evidence (weight 0.3): assumptions, inferences
+    4. CASE SUMMARY
+    - Brief factual summary of what happened
+    - Your reasoning for IPV determination
+    - Confidence level and why
     
-    PHASE 5: TEMPORAL PATTERN ANALYSIS
-    Pattern type: acute_escalation | chronic_pattern | isolated_incident | none
-    Escalation indicators: recent separation, custody disputes, new relationships
-    Timeline: sequence of events leading to death
-    
-    PHASE 6: QUALITY CONTROL
-    Data completeness: Rate narrative detail sufficiency 0-1
-    Analysis flags: Missing information, contradictions, ambiguities
-    Confidence calibration: Overall analysis confidence 0-1
-    
-    NARRATIVE TEXT:
-    '{narrative}'
-    
-    ANALYSIS INSTRUCTIONS:
-    - Analyze ONLY information explicitly stated in narrative
-    - Do NOT infer beyond available evidence
-    - Weight physical evidence most heavily
+    IMPORTANT:
+    - Base analysis ONLY on explicit narrative content
+    - List specific quotes/facts as evidence
+    - If information is missing or unclear, state this
     - Consider alternative explanations
-    - Flag uncertainties and gaps
     
-    RESPOND WITH STRUCTURED JSON:
-    {{
-      "death_classification": {{
-        "primary": "[classification]",
+    Return ONLY this JSON structure:
+    {
+      "ipv_classification": {
+        "ipv_present": boolean,
         "confidence": 0.0-1.0,
-        "supporting_evidence": ["evidence1", "evidence2"],
-        "rationale": "Brief explanation"
-      }},
-      "directionality": {{
-        "primary_direction": "[direction]",
-        "perpetrator_indicators": ["indicator1", "indicator2"],
-        "victim_indicators": ["indicator1", "indicator2"],
-        "bidirectional_score": 0.0-1.0,
+        "level": "definite|probable|possible|unlikely|none"
+      },
+      "indicators_found": {
+        "physical": ["list specific indicators from text"],
+        "psychological": ["list specific indicators"],
+        "sexual": ["list specific indicators"],
+        "economic": ["list specific indicators"],
+        "weapons": ["list weapon-related indicators"]
+      },
+      "death_analysis": {
+        "death_type": "homicide|suicide|homicide-suicide|undetermined|not_applicable",
+        "decedent_role": "victim|perpetrator|both|unclear|not_applicable",
+        "primary_aggressor": "decedent|partner|mutual|unclear|not_applicable",
         "confidence": 0.0-1.0
-      }},
-      "suicide_analysis": {{
-        "intent_classification": "[intent]",
-        "weapon_vs_escape": "[method_type]",
-        "precipitating_factors": ["factor1", "factor2"],
-        "confidence": 0.0-1.0
-      }},
-      "evidence_matrix": {{
-        "physical_evidence": [{{"item": "evidence", "weight": 0.9, "reliability": 0.8}}],
-        "behavioral_evidence": [{{"item": "evidence", "weight": 0.7, "reliability": 0.6}}],
-        "contextual_evidence": [{{"item": "evidence", "weight": 0.5, "reliability": 0.7}}],
-        "total_weight_score": 0.0-1.0
-      }},
-      "temporal_patterns": {{
-        "pattern_type": "[pattern]",
-        "escalation_indicators": ["indicator1", "indicator2"],
-        "timeline_events": ["event1", "event2"],
-        "confidence": 0.0-1.0
-      }},
-      "quality_metrics": {{
-        "data_completeness": 0.0-1.0,
-        "analysis_flags": ["flag1", "flag2"],
-        "overall_confidence": 0.0-1.0,
-        "reviewer_notes": "Any important observations or limitations"
-      }}
-    }}
+      },
+      "critical_evidence": [
+        {
+          "evidence": "quote or fact from narrative",
+          "type": "direct|indirect|circumstantial",
+          "supports": "what this evidence indicates"
+        }
+      ],
+      "case_summary": "2-3 sentence factual summary of the case",
+      "reasoning": "Your analytical reasoning explaining why IPV is/isn't present and your confidence level",
+      "data_quality": {
+        "completeness": 0.0-1.0,
+        "missing_info": ["what key information is missing"],
+        "ambiguities": ["what remains unclear"]
+      }
+    }
   
 processing:
   batch_size: 50
@@ -138,7 +118,7 @@ processing:
 weights:
   cme: 0.6
   le: 0.4
-  threshold: 0.7
+  threshold: 0.5
   # Forensic analysis weights
   forensic_weights:
     physical_evidence: 0.9

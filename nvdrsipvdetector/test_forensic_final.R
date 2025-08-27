@@ -11,7 +11,7 @@ library(nvdrsipvdetector)
 
 # Load and configure
 config <- load_config()
-config$processing$use_forensic_analysis <- TRUE
+config$processing$use_forensic_analysis <- F
 
 # Test Cases with Clear Patterns
 cases <- list(
