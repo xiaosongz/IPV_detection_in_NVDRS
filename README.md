@@ -102,10 +102,30 @@ list(
 )
 ```
 
+## Optional: Storage & Experiments
+
+If you want to store results or track prompt experiments:
+
+```r
+# Store results (optional)
+source("R/0_setup.R")
+parsed <- parse_llm_result(response)
+conn <- connect_db()
+store_llm_result(parsed, conn)
+
+# Track experiments (for R&D)
+prompt_id <- register_prompt(conn, system_prompt, user_prompt)
+results <- ab_test_prompts(conn, prompt_v1, prompt_v2, test_data)
+```
+
+See `docs/RESULT_STORAGE_GUIDE.md` for details. Or don't. The 30-line function works fine without it.
+
 ## The Real Implementation Files
 
 - `docs/ULTIMATE_CLEAN.R` - The 30-line version. Use this.
 - `docs/CLEAN_IMPLEMENTATION.R` - 100-line version with batching if you need it.
+- `docs/RESULT_STORAGE_GUIDE.md` - Storage and experiment tracking (optional).
+- `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization (optional).
 - Everything else - Legacy complexity. Ignore it.
 
 ## Why This Approach?

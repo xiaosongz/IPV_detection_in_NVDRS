@@ -1,14 +1,14 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-27T21:35:45Z
-version: 1.0
+last_updated: 2025-08-28T13:33:43Z
+version: 1.1
 author: Claude Code PM System
 ---
 
 # Project Overview
 
 ## What Is This?
-A single R function that detects intimate partner violence (IPV) in text narratives by calling a Large Language Model API.
+A modular R package that detects intimate partner violence (IPV) in text narratives using Large Language Models, with support for structured data storage and analysis.
 
 ## The Entire Implementation
 ```r
@@ -45,6 +45,9 @@ detect_ipv <- function(text, config = NULL) {
 ### Core Capabilities
 - **IPV Detection**: Identifies intimate partner violence indicators
 - **Confidence Scoring**: Returns 0-1 confidence level
+- **Response Parsing**: Structured extraction of LLM outputs
+- **Data Persistence**: SQLite storage with auto-schema creation
+- **Batch Processing**: Efficient handling of multiple narratives
 - **Error Handling**: Graceful failure with error messages
 - **LLM Agnostic**: Works with any OpenAI-compatible API
 

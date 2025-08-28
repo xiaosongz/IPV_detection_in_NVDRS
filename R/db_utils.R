@@ -117,3 +117,53 @@ set_schema_version <- function(conn, version) {
   DBI::dbExecute(conn, sprintf("PRAGMA user_version = %d", version))
   TRUE
 }
+
+#' Ensure experiment tracking schema exists
+#' 
+#' Creates experiment tracking tables for R&D phase.
+#' This is optional - only needed for experiment mode.
+#' Does not affect the basic llm_results table.
+#' 
+#' @param conn DBI connection object
+#' @return TRUE if successful
+#' @export
+ensure_experiment_schema <- function(conn) {
+  # Read the experiment schema SQL
+  schema_file <- system.file("sql", "experiment_schema.sql", package = "IPVdetection")
+  
+  if (schema_file == "") {
+    # If not installed as package, try local path
+    schema_file <- "inst/sql/experiment_schema.sql"
+    if (!file.exists(schema_file)) {
+      stop("Could not find experiment_schema.sql. Please ensure package is properly installed.")
+    }
+  }
+  
+  schema_sql <- readLines(schema_file, warn = FALSE)
+  schema_sql <- paste(schema_sql, collapse = "\n")
+  
+  # Split into individual statements (handling multi-line statements)
+  # Remove comments first
+  schema_sql <- gsub("--[^\n]*", "", schema_sql)
+  
+  # Split by semicolon but keep CREATE VIEW statements intact
+  statements <- strsplit(schema_sql, ";\\s*\n")[[1]]
+  statements <- trimws(statements)
+  statements <- statements[nzchar(statements)]
+  
+  # Execute each statement
+  for (stmt in statements) {
+    if (nzchar(trimws(stmt))) {
+      tryCatch({
+        DBI::dbExecute(conn, stmt)
+      }, error = function(e) {
+        # Ignore errors for views that might already exist
+        if (!grepl("already exists", e$message, ignore.case = TRUE)) {
+          warning(sprintf("Error executing statement: %s", e$message))
+        }
+      })
+    }
+  }
+  
+  TRUE
+}

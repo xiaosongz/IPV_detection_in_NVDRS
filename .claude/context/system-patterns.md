@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-27T21:35:45Z
-version: 1.0
+last_updated: 2025-08-28T13:33:43Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -18,21 +18,57 @@ author: Claude Code PM System
 
 ## Design Patterns
 
-### Current Pattern: Pure Function
+### Data Persistence Pattern
+**SQLite with Single Table Design**
+- **Simple Schema**: One table (`llm_results`) with all fields
+- **Auto-Creation**: Tables created on first use via `ensure_schema()`
+- **Duplicate Handling**: UNIQUE constraint on (narrative_id, text, model)
+- **Performance**: Optimized indexes, batch operations >1000 records/sec
+- **Zero Configuration**: No setup required, works out of the box
+
+## Implementation Patterns
+
+### Current Pattern: Pipeline Architecture
 ```r
-detect_ipv <- function(text, config = NULL) {
+# 1. Message formatting (pure function)
+build_prompt <- function(system_prompt, user_prompt) {
   # Input validation
+  # Message structure creation
+  # Return formatted messages
+}
+
+# 2. API interface (I/O function) 
+call_llm <- function(user_prompt, system_prompt, ...) {
+  # Input validation
+  # Call build_prompt() for messages
   # API call
-  # Output transformation
   # Error handling
+}
+
+# 3. Response parsing (pure function)
+parse_llm_result <- function(response, narrative_id = NULL) {
+  # Parse JSON response
+  # Extract structured fields
+  # Handle errors gracefully
+  # Return standardized structure
+}
+
+# 4. Storage layer (I/O function)
+store_llm_result <- function(parsed_result, conn = NULL) {
+  # Connect to SQLite
+  # Insert parsed data
+  # Handle duplicates
+  # Return success status
 }
 ```
 
 **Characteristics**:
-- No side effects
-- Predictable output
-- Self-contained
-- Testable in isolation
+- **Pipeline Processing**: Data flows through discrete stages
+- **Separation of Concerns**: Each function has single responsibility
+- **Database Abstraction**: DBI interface for portability
+- **Error Resilience**: Each stage handles failures gracefully
+- **Composability**: Functions can be used independently or chained
+- **Testability**: Each function tested in isolation (200+ test cases)
 
 ### Anti-Patterns Removed
 - ❌ **Over-Engineering** - Removed 10,000+ lines of abstraction
@@ -43,14 +79,14 @@ detect_ipv <- function(text, config = NULL) {
 ## Data Flow Pattern
 
 ```
-Text Input → detect_ipv() → LLM API → JSON Response → R List
+System + User Prompts → build_prompt() → Messages List → call_llm() → LLM API → JSON Response → R List
 ```
 
 ### Input Processing
-1. Accept text (string)
-2. Trim whitespace
-3. Check for empty/NA
-4. Pass to API
+1. Accept system and user prompts (both required strings)
+2. Validate inputs (non-empty, single character strings)
+3. Format into messages structure
+4. Pass to LLM API
 
 ### Output Processing
 1. Receive JSON from API

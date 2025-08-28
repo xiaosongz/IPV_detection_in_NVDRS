@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-27T21:35:45Z
-version: 1.0
+last_updated: 2025-08-28T13:33:43Z
+version: 1.1
 author: Claude Code PM System
 ---
 
@@ -12,12 +12,15 @@ author: Claude Code PM System
 - **Version**: R 4.0+ recommended
 - **IDE**: RStudio (optional, any text editor works)
 
-## Core Dependencies (Minimal)
+## Core Dependencies
 
 ### Required Packages
 ```r
-# Essential - only these two are needed
+# API and parsing
 install.packages(c("httr2", "jsonlite"))
+
+# Database storage (new)
+install.packages(c("DBI", "RSQLite"))
 ```
 
 1. **httr2** - HTTP client for API calls
@@ -27,6 +30,20 @@ install.packages(c("httr2", "jsonlite"))
 2. **jsonlite** - JSON parsing
    - Purpose: Parse LLM responses
    - Usage: Convert JSON strings to R objects
+
+3. **DBI** - Database interface (new)
+   - Purpose: Abstract database operations
+   - Usage: Connect to and query databases
+
+4. **RSQLite** - SQLite driver (new)
+   - Purpose: SQLite database backend
+   - Usage: Zero-configuration data storage
+
+### Testing Packages
+```r
+# For comprehensive testing
+install.packages("testthat")
+```
 
 ### Optional Packages (User Choice)
 ```r

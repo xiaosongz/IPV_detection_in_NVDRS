@@ -1,6 +1,6 @@
 ---
 name: result-parsing
-status: backlog
+status: completed
 created: 2025-08-28T01:14:26Z
 progress: 0%
 prd: .claude/prds/result-parsing.md

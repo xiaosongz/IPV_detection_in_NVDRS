@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-27T21:35:45Z
-version: 1.0
+last_updated: 2025-08-28T13:33:43Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -20,12 +20,36 @@ IPV_detection_in_NVDRS/
 ├── docs/                 # Core implementation files
 │   ├── ULTIMATE_CLEAN.R     # Primary 30-line implementation
 │   ├── CLEAN_IMPLEMENTATION.R # Alternative 100-line version
+│   ├── LLM_RESPONSE_ANALYSIS.md # Analysis of LLM response structures
+│   ├── PROMPT_STRUCTURE_ANALYSIS.md # Prompt engineering documentation
 │   └── *.md             # Documentation files
+├── examples/             # Usage examples
+│   └── parser_example.R # Example of parsing LLM responses
 ├── config/               # Configuration files (legacy)
 ├── logs/                 # API call logs and debugging
 ├── results/              # Output directory for analysis results
 ├── tests/                # Test files and validation scripts
-├── R/                    # R scripts directory (currently empty)
+│   ├── testthat/         # Comprehensive unit tests
+│   │   ├── test-build_prompt.R
+│   │   ├── test-call_llm.R
+│   │   ├── test-parse_llm_result.R
+│   │   ├── test-db_utils.R
+│   │   └── test-store_llm_result.R
+│   ├── performance/      # Performance benchmarks
+│   │   └── benchmark_storage.R
+│   ├── test_prompt.json  # Structured test prompts
+│   └── *.R              # Test utility scripts
+├── R/                    # Core R functions (modular)
+│   ├── 0_setup.R         # Direct execution setup script
+│   ├── build_prompt.R    # Message formatting function
+│   ├── call_llm.R       # LLM API interface function
+│   ├── parse_llm_result.R # Parse LLM responses to structured data
+│   ├── db_utils.R       # SQLite database connection utilities
+│   ├── store_llm_result.R # Store parsed results in database
+│   └── IPVdetection-package.R # Package metadata
+├── inst/                 # Package installed files
+│   └── sql/             # SQL schema and migrations
+│       └── schema.sql   # SQLite database schema
 ├── README.md             # Project documentation
 ├── CLAUDE.md            # Claude Code specific instructions
 ├── CLAUDE.local.md      # Local Claude configuration
@@ -34,12 +58,20 @@ IPV_detection_in_NVDRS/
 
 ## Key Directories
 
-### `/docs` - Core Implementation
-- **Purpose**: Contains the actual working code
+### `/R` - Core Implementation
+- **Purpose**: Contains the modular R functions following package structure
 - **Key Files**: 
-  - `ULTIMATE_CLEAN.R` - The entire IPV detection in 30 lines
+  - `call_llm.R` - Main LLM interface function (requires both prompts)
+  - `build_prompt.R` - Message formatting utility
+  - `0_setup.R` - Direct execution setup script
+- **Philosophy**: One function per file, clear separation of concerns
+
+### `/docs` - Legacy Implementation & Documentation  
+- **Purpose**: Contains reference implementations and documentation
+- **Key Files**: 
+  - `ULTIMATE_CLEAN.R` - Original 30-line implementation
   - `CLEAN_IMPLEMENTATION.R` - Extended version with batching support
-- **Philosophy**: Code lives here, not in complex package structures
+- **Philosophy**: Historical reference, actual code now in `/R`
 
 ### `/data-raw` - Source Data
 - **Purpose**: Store raw input data files
@@ -80,12 +112,17 @@ The project previously had complex package structure that has been removed:
 - ~~`/scripts/`~~ - Removed complex utility scripts
 - ~~`/test/`~~ - Removed complex test harness
 
-## Current Simplification
+## Current Architecture
 
-Following Unix philosophy, the project now consists of:
-1. **One function** (`detect_ipv`) in one file
-2. **User data** in data-raw/
-3. **User results** in results/
-4. **Minimal dependencies** (httr2, jsonlite)
+Following Unix philosophy with modular design, the project now consists of:
+1. **Two focused functions** (`build_prompt`, `call_llm`) with clear separation
+2. **Comprehensive testing** (77+ test cases in testthat/)  
+3. **Direct setup** (0_setup.R executes on source)
+4. **User data** in data-raw/
+5. **User results** in results/
+6. **Minimal dependencies** (httr2, jsonlite)
 
-No hidden directories, no complex hierarchies, no magic.
+Clean package structure without complex hierarchies or magic.
+
+## Update History
+- 2025-08-28: Added R package structure with modular functions, comprehensive testing framework, and JSON-based configuration while maintaining Unix philosophy
