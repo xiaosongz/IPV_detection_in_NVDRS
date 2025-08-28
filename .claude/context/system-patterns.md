@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-28T13:33:43Z
-version: 1.2
+last_updated: 2025-08-28T14:15:08Z
+version: 1.3
 author: Claude Code PM System
 ---
 
@@ -19,12 +19,19 @@ author: Claude Code PM System
 ## Design Patterns
 
 ### Data Persistence Pattern
-**SQLite with Single Table Design**
-- **Simple Schema**: One table (`llm_results`) with all fields
-- **Auto-Creation**: Tables created on first use via `ensure_schema()`
-- **Duplicate Handling**: UNIQUE constraint on (narrative_id, text, model)
-- **Performance**: Optimized indexes, batch operations >1000 records/sec
-- **Zero Configuration**: No setup required, works out of the box
+
+**Hybrid Design: Simple + Experimental**
+
+**Production Mode (Default)**
+- **Single Table**: `llm_results` with all fields
+- **Zero Configuration**: Works out of the box
+- **Performance**: >1000 inserts/second
+
+**Experiment Mode (Optional)**
+- **4-Table Schema**: prompts, experiments, results, ground_truth
+- **Version Control**: Automatic prompt deduplication
+- **Statistical Analysis**: Built-in A/B testing and metrics
+- **Opt-in Complexity**: Only use when needed
 
 ## Implementation Patterns
 
@@ -71,8 +78,7 @@ store_llm_result <- function(parsed_result, conn = NULL) {
 - **Testability**: Each function tested in isolation (200+ test cases)
 
 ### Anti-Patterns Removed
-- ❌ **Over-Engineering** - Removed 10,000+ lines of abstraction
-- ❌ **Framework Lock-in** - No required workflow
+- ❌ **Over-Engineering** - No unnecessary abstractions
 - ❌ **Hidden Complexity** - No magic methods or inheritance
 - ❌ **Premature Optimization** - Let user decide when/how to optimize
 
@@ -121,7 +127,7 @@ Sys.getenv("LLM_API_URL", "default_value")
 ### Direct Config Object Second
 ```r
 config <- list(api_url = "...", model = "...")
-detect_ipv(text, config)
+call_llm(user_prompt, system_prompt, config)
 ```
 
 **Benefits**:
@@ -136,26 +142,26 @@ detect_ipv(text, config)
 
 #### Sequential Processing
 ```r
-results <- lapply(texts, detect_ipv)
+results <- lapply(texts, function(x) call_llm(x, system_prompt))
 ```
 
 #### Parallel Processing
 ```r
-results <- parallel::mclapply(texts, detect_ipv)
+results <- parallel::mclapply(texts, function(x) call_llm(x, system_prompt))
 ```
 
 #### With Progress
 ```r
-results <- pbapply::pblapply(texts, detect_ipv)
+results <- pbapply::pblapply(texts, function(x) call_llm(x, system_prompt))
 ```
 
 #### With Retry
 ```r
-safe_detect <- function(text) {
-  result <- detect_ipv(text)
+safe_call <- function(user_prompt, system_prompt) {
+  result <- call_llm(user_prompt, system_prompt)
   if (!is.null(result$error)) {
     Sys.sleep(1)
-    result <- detect_ipv(text)
+    result <- call_llm(user_prompt, system_prompt)
   }
   result
 }
@@ -170,8 +176,10 @@ safe_detect <- function(text) {
 - User decides organization
 
 ### File Responsibility
-- `ULTIMATE_CLEAN.R` - Minimal implementation
-- `CLEAN_IMPLEMENTATION.R` - Extended features
+- `R/call_llm.R` - Core LLM interface function
+- `R/parse_llm_result.R` - Response parsing
+- `R/store_llm_result.R` - Storage layer
+- `R/experiment_*.R` - Research tracking
 - User files - Custom workflows
 
 ## Testing Pattern
@@ -179,13 +187,12 @@ safe_detect <- function(text) {
 ### User-Controlled Testing
 ```r
 # User writes their own tests
-test_result <- detect_ipv("test narrative")
+test_result <- call_llm("test narrative", "Detect IPV")
 stopifnot(is.list(test_result))
-stopifnot(names(test_result) %in% c("detected", "confidence"))
+stopifnot(!is.null(test_result$response))
 ```
 
 **Philosophy**:
-- No test framework required
 - User validates as needed
 - Simple assertions sufficient
 

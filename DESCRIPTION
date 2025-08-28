@@ -2,7 +2,7 @@ Package: IPVdetection
 Title: Minimal IPV Detection Using LLM APIs
 Version: 0.2.0
 Authors@R: 
-    person("Your", "Name", , "your.email@example.com", role = c("aut", "cre"),
+    person("Xiaosong", "Zhang", , "xiaosonz@umich.edu", role = c("aut", "cre"),
            comment = c(ORCID = "YOUR-ORCID-ID"))
 Description: A minimalist approach to detecting intimate partner violence (IPV) 
     indicators in death investigation narratives using Large Language Model APIs.

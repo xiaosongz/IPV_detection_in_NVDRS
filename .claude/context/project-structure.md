@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-28T13:33:43Z
-version: 1.2
+last_updated: 2025-08-28T14:15:08Z
+version: 1.3
 author: Claude Code PM System
 ---
 
@@ -22,6 +22,7 @@ IPV_detection_in_NVDRS/
 │   ├── CLEAN_IMPLEMENTATION.R # Alternative 100-line version
 │   ├── LLM_RESPONSE_ANALYSIS.md # Analysis of LLM response structures
 │   ├── PROMPT_STRUCTURE_ANALYSIS.md # Prompt engineering documentation
+│   ├── EXPERIMENT_MODE_GUIDE.md # Complete guide for R&D experiment tracking
 │   └── *.md             # Documentation files
 ├── examples/             # Usage examples
 │   └── parser_example.R # Example of parsing LLM responses
@@ -34,7 +35,9 @@ IPV_detection_in_NVDRS/
 │   │   ├── test-call_llm.R
 │   │   ├── test-parse_llm_result.R
 │   │   ├── test-db_utils.R
-│   │   └── test-store_llm_result.R
+│   │   ├── test-store_llm_result.R
+│   │   ├── test-experiment_utils.R
+│   │   └── test-experiment_analysis.R
 │   ├── performance/      # Performance benchmarks
 │   │   └── benchmark_storage.R
 │   ├── test_prompt.json  # Structured test prompts
@@ -46,10 +49,13 @@ IPV_detection_in_NVDRS/
 │   ├── parse_llm_result.R # Parse LLM responses to structured data
 │   ├── db_utils.R       # SQLite database connection utilities
 │   ├── store_llm_result.R # Store parsed results in database
+│   ├── experiment_utils.R # Prompt versioning and experiment management
+│   ├── experiment_analysis.R # Statistical comparison and A/B testing
 │   └── IPVdetection-package.R # Package metadata
 ├── inst/                 # Package installed files
 │   └── sql/             # SQL schema and migrations
-│       └── schema.sql   # SQLite database schema
+│       ├── schema.sql   # Basic SQLite database schema
+│       └── experiment_schema.sql # R&D experiment tracking schema
 ├── README.md             # Project documentation
 ├── CLAUDE.md            # Claude Code specific instructions
 ├── CLAUDE.local.md      # Local Claude configuration

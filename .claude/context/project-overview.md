@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-28T13:33:43Z
-version: 1.1
+last_updated: 2025-08-28T14:15:08Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -10,35 +10,14 @@ author: Claude Code PM System
 ## What Is This?
 A modular R package that detects intimate partner violence (IPV) in text narratives using Large Language Models, with support for structured data storage and analysis.
 
-## The Entire Implementation
-```r
-detect_ipv <- function(text, config = NULL) {
-  if (is.null(config)) {
-    config <- list(
-      api_url = Sys.getenv("LLM_API_URL", "http://192.168.10.22:1234/v1/chat/completions"),
-      model = Sys.getenv("LLM_MODEL", "openai/gpt-oss-120b")
-    )
-  }
-  
-  if (is.null(text) || is.na(text) || trimws(text) == "") {
-    return(list(detected = NA, confidence = 0))
-  }
-  
-  tryCatch({
-    response <- httr2::request(config$api_url) |>
-      httr2::req_body_json(list(
-        model = config$model,
-        messages = list(list(role = "user", content = text))
-      )) |>
-      httr2::req_perform() |>
-      httr2::resp_body_json()
-    
-    jsonlite::fromJSON(response$choices[[1]]$message$content)
-  }, error = function(e) {
-    list(detected = NA, confidence = 0, error = e$message)
-  })
-}
-```
+## Core Architecture
+
+The system is built on a pipeline of simple, composable functions:
+
+1. **`call_llm()`** - Core LLM interface
+2. **`parse_llm_result()`** - Response parsing
+3. **`store_llm_result()`** - Data persistence
+4. **Experiment utilities** - R&D tracking (optional)
 
 ## Features
 
@@ -50,6 +29,13 @@ detect_ipv <- function(text, config = NULL) {
 - **Batch Processing**: Efficient handling of multiple narratives
 - **Error Handling**: Graceful failure with error messages
 - **LLM Agnostic**: Works with any OpenAI-compatible API
+
+### R&D Capabilities (Optional)
+- **Prompt Versioning**: Track and compare different prompts
+- **Experiment Tracking**: Batch testing with statistical analysis
+- **A/B Testing**: Paired comparisons with significance tests
+- **Ground Truth Evaluation**: Calculate accuracy, precision, recall
+- **Performance Evolution**: Track improvements over time
 
 ### Input/Output
 - **Input**: Any text string (narrative)
@@ -82,7 +68,7 @@ config <- list(
   api_url = "your-endpoint",
   model = "your-model"
 )
-result <- detect_ipv(text, config)
+result <- call_llm(text, system_prompt, config)
 ```
 
 ## Usage Examples
@@ -90,31 +76,38 @@ result <- detect_ipv(text, config)
 ### Single Narrative
 ```r
 narrative <- "Victim was shot by ex-husband during custody dispute"
-result <- detect_ipv(narrative)
-print(result$detected)  # TRUE
-print(result$confidence)  # 0.85
+result <- call_llm(narrative, "Detect IPV: TRUE/FALSE")
+parsed <- parse_llm_result(result$response)
+print(parsed$detected)  # TRUE
+print(parsed$confidence)  # 0.85
 ```
 
 ### Batch Processing
 ```r
 data <- read.csv("narratives.csv")
-data$ipv <- lapply(data$text, detect_ipv)
+data$ipv <- lapply(data$text, function(x) {
+  result <- call_llm(x, system_prompt)
+  parse_llm_result(result$response)
+})
 ```
 
 ### Parallel Processing
 ```r
 library(parallel)
-results <- mclapply(narratives, detect_ipv, mc.cores = 4)
+results <- mclapply(narratives, function(x) {
+  result <- call_llm(x, system_prompt)
+  parse_llm_result(result$response)
+}, mc.cores = 4)
 ```
 
 ### With Error Handling
 ```r
-safe_detect <- function(text) {
-  result <- detect_ipv(text)
+safe_call <- function(text, system_prompt) {
+  result <- call_llm(text, system_prompt)
   if (!is.null(result$error)) {
     warning(paste("Error:", result$error))
   }
-  result
+  parse_llm_result(result$response)
 }
 ```
 
@@ -141,8 +134,10 @@ safe_detect <- function(text) {
 ## Project Components
 
 ### Essential Files
-- `docs/ULTIMATE_CLEAN.R` - The 30-line implementation
-- `docs/CLEAN_IMPLEMENTATION.R` - 100-line version with extras
+- `R/call_llm.R` - Core LLM interface function
+- `R/parse_llm_result.R` - Response parsing
+- `R/store_llm_result.R` - Storage layer
+- `R/experiment_*.R` - Research tracking utilities
 - `README.md` - User documentation
 - `CLAUDE.md` - Development philosophy
 
@@ -159,10 +154,10 @@ safe_detect <- function(text) {
 ## Quality Metrics
 
 ### Code Quality
-- **Lines of Code**: 30 (core function)
-- **Dependencies**: 2 packages
-- **Cyclomatic Complexity**: 3
-- **Test Coverage**: User-defined
+- **Modular Design**: Small, focused functions
+- **Dependencies**: Minimal (httr2, jsonlite, DBI)
+- **Test Coverage**: 200+ test cases
+- **Documentation**: Complete roxygen2 docs
 
 ### Performance Metrics
 - **Response Time**: 500-2000ms per call
@@ -211,7 +206,7 @@ safe_detect <- function(text) {
 - **Setup**: Simpler implementation
 
 ### vs. Complex Packages
-- **Simplicity**: 30 vs 10,000+ lines
+- **Simplicity**: Simple functions vs complex frameworks
 - **Control**: User owns workflow
 - **Learning**: Minutes vs days
 - **Flexibility**: Complete freedom

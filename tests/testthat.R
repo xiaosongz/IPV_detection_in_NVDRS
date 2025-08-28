@@ -8,6 +8,7 @@ library(here)
 source(here::here("R", "0_setup.R"))
 source(here::here("R", "build_prompt.R"))
 source(here::here("R", "call_llm.R"))
+source(here::here("R", "parse_llm_result.R"))
 
 # Run the tests
 test_dir(here::here("tests", "testthat"))

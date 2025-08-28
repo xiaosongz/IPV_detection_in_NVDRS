@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-**THE TRUTH**: This entire project is 30 lines of code. Everything else is noise.
+**THE TRUTH**: GOOD TASTE is the KEY!
+USE Tidyverse style guide!
+
 
 ## The Only File That Matters
 
