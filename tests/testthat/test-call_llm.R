@@ -1,56 +1,51 @@
+# Load test prompts from JSON file
+test_prompts <- jsonlite::fromJSON(here::here("tests", "test_prompt.json"))
+sample_ipv_system_prompt <- test_prompts$system_prompt
+sample_ipv_user_prompt <- test_prompts$user_prompt
+
 test_that("call_llm validates input parameters", {
   # Test invalid prompt types
   expect_error(
-    call_llm(123),
-    "'prompt' must be a single character string"
+    call_llm(123, "system"),
+    "'user_prompt' must be a single character string"
   )
   
   expect_error(
-    call_llm(c("prompt1", "prompt2")),
-    "'prompt' must be a single character string"
+    call_llm("user", 123),
+    "'system_prompt' must be a single character string"
   )
   
   expect_error(
-    call_llm(NULL),
-    "'prompt' must be a single character string"
+    call_llm(c("prompt1", "prompt2"), "system"),
+    "'user_prompt' must be a single character string"
+  )
+  
+  expect_error(
+    call_llm("user", c("sys1", "sys2")),
+    "'system_prompt' must be a single character string"
   )
   
   # Test invalid temperature values
   expect_error(
-    call_llm("test", temperature = -0.1),
+    call_llm("test", "system", temperature = -0.1),
     "'temperature' must be a number between 0 and 1"
   )
   
   expect_error(
-    call_llm("test", temperature = 1.5),
+    call_llm("test", "system", temperature = 1.5),
     "'temperature' must be a number between 0 and 1"
   )
   
   expect_error(
-    call_llm("test", temperature = "high"),
+    call_llm("test", "system", temperature = "high"),
     "'temperature' must be a number between 0 and 1"
   )
 })
 
-test_that("call_llm builds correct request structure", {
-  # Mock the httr2 functions to test request building
-  # This test would require httptest2 or mockery for proper mocking
-  skip_if_not_installed("mockery")
-  
-  # Example of what the test would look like with mocking:
-  # mock_response <- list(
-  #   choices = list(list(message = list(content = "test response"))),
-  #   usage = list(total_tokens = 100)
-  # )
-  # 
-  # mockery::stub(call_llm, "httr2::req_perform", mock_response)
-  # result <- call_llm("test prompt")
-  # expect_equal(result$choices[[1]]$message$content, "test response")
-})
 
-test_that("call_llm works with test prompt file", {
-  skip_if_not(file.exists("tests/test_promt.txt"), 
-              "Test prompt file not found")
+test_that("call_llm works with test prompt JSON", {
+  skip_if_not(file.exists(here::here("tests", "test_prompt.json")), 
+              "Test prompt JSON file not found")
   
   # Check if LLM API is available
   api_url <- Sys.getenv("LLM_API_URL", 
@@ -66,13 +61,12 @@ test_that("call_llm works with test prompt file", {
     "LLM API not available"
   )
   
-  # Read test prompt
-  prompt <- readLines(here::here("tests", "test_promt.txt"), 
-                     warn = FALSE) |> 
-    paste(collapse = "\n")
-  
-  # Call the function
-  result <- call_llm(prompt, temperature = 0.1)
+  # Call the function with sample IPV prompts from JSON
+  result <- call_llm(
+    sample_ipv_user_prompt, 
+    sample_ipv_system_prompt, 
+    temperature = 0.1
+  )
   
   # Check response structure
   expect_type(result, "list")
@@ -103,10 +97,11 @@ test_that("call_llm respects temperature parameter", {
   )
   
   # Temperature 0 should give consistent results
-  prompt <- "What is 2+2? Answer with just the number."
+  user_prompt <- "What is 2+2? Answer with just the number."
+  system_prompt <- "You are a helpful assistant."
   
-  result1 <- call_llm(prompt, temperature = 0)
-  result2 <- call_llm(prompt, temperature = 0)
+  result1 <- call_llm(user_prompt, system_prompt, temperature = 0)
+  result2 <- call_llm(user_prompt, system_prompt, temperature = 0)
   
   # With temperature 0, responses should be identical
   # (though some models may still have minimal variation)

@@ -19,7 +19,8 @@ That's it. One function, one purpose.
 1. **Never Add Complexity** - If you're adding classes, methods, or abstractions, STOP.
 2. **trimws() Everything** - Text always has trailing spaces. Deal with it.
 3. **Let Users Control** - They decide loops, parallelization, error handling. Not you.
-4. **30 Lines Maximum** - If the solution needs more, the problem is wrong.
+4. **100 Lines Maximum** - If the solution needs more, the problem is wrong.
+5. **One Function Per File** - Never append functions to existing files. Create separate R files.
 
 ## File Structure (What Actually Matters)
 

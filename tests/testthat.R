@@ -1,11 +1,13 @@
-# This file is part of the standard testthat setup
-# Run tests with: devtools::test() or testthat::test_local()
+# This file runs tests for standalone R functions (not an R package)
+# Run with: source("tests/testthat.R")
 
 library(testthat)
 library(here)
 
-# Source the functions to test
+# Source all R functions
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "build_prompt.R"))
 source(here::here("R", "call_llm.R"))
 
 # Run the tests
-test_check("IPV_detection_in_NVDRS")
+test_dir(here::here("tests", "testthat"))
