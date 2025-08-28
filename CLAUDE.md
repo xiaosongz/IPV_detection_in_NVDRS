@@ -22,6 +22,29 @@ That's it. One function, one purpose.
 4. **100 Lines Maximum** - If the solution needs more, the problem is wrong.
 5. **One Function Per File** - Never append functions to existing files. Create separate R files.
 
+## Git Commit Best Practices (MANDATORY)
+
+When working on GitHub issues:
+1. **Create feature branch**: `git checkout -b issue-{number}` before starting work
+2. **Commit frequently**: Small, focused commits with clear messages
+3. **Reference issues**: Always use "Issue #{number}: {description}" format
+4. **Test before commit**: Run tests, ensure code works
+5. **Close issues properly**: Use "Closes #{number}" in final commit
+6. **Never leave work uncommitted**: Every completed issue MUST have commits
+
+Example workflow:
+```bash
+git checkout -b issue-4              # Start new feature branch
+# ... do work ...
+git add R/new_function.R
+git commit -m "Issue #4: Add database schema"
+# ... more work ...
+git commit -m "Issue #4: Add connection utilities"
+git commit -m "Issue #4: Complete implementation - Closes #4"
+git checkout dev_c                   # Return to main branch
+git merge --no-ff issue-4           # Merge with history
+```
+
 ## File Structure (What Actually Matters)
 
 ```
