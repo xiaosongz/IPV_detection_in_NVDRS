@@ -1,9 +1,8 @@
+# Tests for database utility functions
+
 # Source required functions
 library(here)
-source(here::here("R", "0_setup.R"))
 source(here::here("R", "db_utils.R"))
-source(here::here("R", "experiment_utils.R"))
-source(here::here("R", "experiment_analysis.R"))
 
 test_that("get_db_connection creates valid SQLite connection", {
   skip_if_not_installed("DBI")

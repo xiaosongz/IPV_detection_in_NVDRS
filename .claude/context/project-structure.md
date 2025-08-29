@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-28T14:15:08Z
-version: 1.3
+last_updated: 2025-08-29T18:53:57Z
+version: 1.4
 author: Claude Code PM System
 ---
 
@@ -30,17 +30,16 @@ IPV_detection_in_NVDRS/
 ├── logs/                 # API call logs and debugging
 ├── results/              # Output directory for analysis results
 ├── tests/                # Test files and validation scripts
-│   ├── testthat/         # Comprehensive unit tests
-│   │   ├── test-build_prompt.R
-│   │   ├── test-call_llm.R
-│   │   ├── test-parse_llm_result.R
-│   │   ├── test-db_utils.R
-│   │   ├── test-store_llm_result.R
-│   │   ├── test-experiment_utils.R
-│   │   └── test-experiment_analysis.R
+│   ├── testthat/         # Streamlined unit tests (6 focused test files)
+│   │   ├── test-build_prompt.R      # Prompt building functionality
+│   │   ├── test-call_llm.R          # LLM API interface testing  
+│   │   ├── test-parse_llm_result.R  # Response parsing validation
+│   │   ├── test-db_utils.R          # Database connectivity (SQLite/PostgreSQL)
+│   │   ├── test-store_llm_result.R  # Result storage testing
+│   │   └── test-detect_ipv.R        # Core IPV detection logic
 │   ├── performance/      # Performance benchmarks
-│   │   └── benchmark_storage.R
-│   ├── test_prompt.json  # Structured test prompts
+│   │   ├── benchmark_postgres.R     # PostgreSQL performance testing
+│   │   └── validate_performance_targets.R  # Performance validation
 │   └── *.R              # Test utility scripts
 ├── R/                    # Core R functions (modular)
 │   ├── 0_setup.R         # Direct execution setup script
@@ -131,4 +130,6 @@ Following Unix philosophy with modular design, the project now consists of:
 Clean package structure without complex hierarchies or magic.
 
 ## Update History
+- 2025-08-29: Test suite cleaned and optimized - removed 2 outdated files, streamlined 6 core test files
+- 2025-08-29: Performance benchmarks directory updated with PostgreSQL-specific testing tools
 - 2025-08-28: Added R package structure with modular functions, comprehensive testing framework, and JSON-based configuration while maintaining Unix philosophy
