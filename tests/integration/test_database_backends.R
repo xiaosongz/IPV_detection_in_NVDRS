@@ -115,7 +115,7 @@ test_that("Both SQLite and PostgreSQL can store identical datasets", {
   # Test SQLite storage
   sqlite_start <- Sys.time()
   sqlite_results <- store_llm_results_batch(test_data, 
-                                          db_config = db_setup$sqlite$db_path)
+                                          db_path = db_setup$sqlite$db_path)
   sqlite_duration <- as.numeric(difftime(Sys.time(), sqlite_start, units = "secs"))
   
   expect_true(sqlite_results$success)
@@ -345,7 +345,7 @@ test_that("Performance comparison between backends", {
   # Benchmark SQLite performance
   sqlite_start <- Sys.time()
   sqlite_results <- store_llm_results_batch(test_data, 
-                                          db_config = db_setup$sqlite$db_path,
+                                          db_path = db_setup$sqlite$db_path,
                                           chunk_size = 50)
   sqlite_duration_ms <- as.numeric(difftime(Sys.time(), sqlite_start, units = "secs")) * 1000
   

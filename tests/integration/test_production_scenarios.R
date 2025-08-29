@@ -173,7 +173,7 @@ test_that("High load batch processing performance", {
   sqlite_start <- Sys.time()
   
   sqlite_result <- store_llm_results_batch(test_data, 
-                                         db_config = setup$sqlite$db_path,
+                                         db_path = setup$sqlite$db_path,
                                          chunk_size = 500)
   
   sqlite_duration <- as.numeric(difftime(Sys.time(), sqlite_start, units = "secs"))
@@ -232,7 +232,7 @@ test_that("Large batch operations with memory management", {
   
   # Test with chunked processing to manage memory
   result <- store_llm_results_batch(large_data,
-                                   db_config = setup$sqlite$db_path,
+                                   db_path = setup$sqlite$db_path,
                                    chunk_size = 1000)  # Process in smaller chunks
   
   final_memory <- monitor_memory_usage()
@@ -332,7 +332,7 @@ test_that("Database corruption detection and recovery", {
   
   # Insert some test data
   test_data <- create_production_dataset(100, "corruption")
-  result <- store_llm_results_batch(test_data, db_config = setup$sqlite$db_path)
+  result <- store_llm_results_batch(test_data, db_path = setup$sqlite$db_path)
   expect_true(result$success)
   
   # Verify data integrity with constraints
@@ -366,7 +366,7 @@ test_that("Production-scale query performance", {
   
   # Create realistic production dataset
   test_data <- create_production_dataset(2000, "query")
-  result <- store_llm_results_batch(test_data, db_config = setup$sqlite$db_path)
+  result <- store_llm_results_batch(test_data, db_path = setup$sqlite$db_path)
   expect_true(result$success)
   
   # Test common production queries
