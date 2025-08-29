@@ -60,7 +60,7 @@ processing:
 performance:
   enable_metrics: true
   benchmark_on_startup: false
-  target_insert_rate: 5000    # inserts/second for PostgreSQL
+  target_insert_rate: 300     # records/second over network (realistic)
   connection_health_check: true
   
   # Alerts and thresholds

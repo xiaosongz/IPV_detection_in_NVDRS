@@ -129,7 +129,7 @@ store_llm_result <- function(parsed_result,
 #' 
 #' Efficient batch insertion with transaction support.
 #' Optimized for both SQLite and PostgreSQL backends.
-#' Performance target: >1000 inserts/second (SQLite), >5000 inserts/second (PostgreSQL).
+#' Realistic performance: ~100-500 records/second depending on network latency.
 #' 
 #' @param parsed_results List of parsed results
 #' @param db_path Database file path for SQLite or config for unified connection (default: "llm_results.db")

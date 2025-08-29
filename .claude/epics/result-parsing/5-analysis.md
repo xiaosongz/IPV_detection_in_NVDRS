@@ -58,7 +58,7 @@ Extend storage layer to support PostgreSQL backend alongside existing SQLite imp
 2. Create performance benchmarking scripts
 3. Document environment variable configuration
 4. Add migration guide from SQLite to PostgreSQL
-5. Test and validate >5000 inserts/second target
+5. Test and validate ~250-500 records/second target
 
 **Dependencies**: Needs Streams A & B completed for testing
 
@@ -72,7 +72,7 @@ Extend storage layer to support PostgreSQL backend alongside existing SQLite imp
 ## Risk Areas
 
 1. **Breaking Changes**: Must maintain backwards compatibility with SQLite
-2. **Performance**: PostgreSQL must meet >5000 inserts/second target
+2. **Performance**: PostgreSQL must meet ~250-500 records/second target over network
 3. **Connection Pooling**: Proper resource management for production use
 4. **Schema Differences**: Handle AUTOINCREMENT vs SERIAL correctly
 

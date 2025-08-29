@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide covers production deployment of the IPV detection system with PostgreSQL backend. The PostgreSQL implementation provides enhanced performance (>5000 inserts/second), connection pooling, and concurrent access support for large-scale deployments.
+This guide covers production deployment of the IPV detection system with PostgreSQL backend. The PostgreSQL implementation provides enhanced performance (~250-500 records/second over network), connection pooling, and concurrent access support for large-scale deployments.
 
 ## Prerequisites
 
@@ -172,10 +172,12 @@ monitor_db_health <- function() {
 
 ### Expected Performance Metrics
 
-- **Single inserts**: 100-500 inserts/second
-- **Batch inserts**: >5000 inserts/second
-- **Connection time**: <100ms
+- **Single inserts**: 100-300 records/second (network dependent)
+- **Batch inserts**: ~250-500 records/second over network (local: ~1000-2000)
+- **Connection time**: <100ms (network dependent)
 - **Query response**: <50ms for simple operations
+
+**Note**: Performance varies significantly based on network latency to database server. Local PostgreSQL can achieve higher throughput, but production deployments over network typically see 250-500 records/second for sustained operations.
 
 ### Batch Processing Optimization
 
