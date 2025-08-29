@@ -156,7 +156,7 @@ test_that("Both SQLite and PostgreSQL can store identical datasets", {
     
     expect_equal(nrow(sqlite_data), nrow(postgres_data))
     expect_equal(sqlite_data$narrative_id, postgres_data$narrative_id)
-    expect_equal(sqlite_data$detected, postgres_data$detected)
+    expect_equal(as.logical(sqlite_data$detected), as.logical(postgres_data$detected))  # Handle type differences
     expect_equal(sqlite_data$model, postgres_data$model)
     
     # Allow small floating point differences in confidence
