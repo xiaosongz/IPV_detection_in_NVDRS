@@ -17,6 +17,30 @@
 #' @param db_path Path to database file (default: "llm_results.db")
 #' @return Prompt version ID or NULL if failed
 #' @export
+#' @examples
+#' \dontrun{
+#' # Register a baseline prompt version
+#' sys_prompt <- "You are an expert at identifying intimate partner violence."
+#' user_template <- "Analyze this narrative for IPV indicators: {text}"
+#' 
+#' prompt_id <- register_prompt(
+#'   system_prompt = sys_prompt,
+#'   user_prompt_template = user_template,
+#'   version_tag = "v1.0_baseline",
+#'   notes = "Initial baseline prompt"
+#' )
+#' 
+#' # Register improved version
+#' enhanced_prompt_id <- register_prompt(
+#'   system_prompt = "You are an expert forensic analyst...",
+#'   user_prompt_template = "Analyze for IPV with confidence: {text}",
+#'   version_tag = "v2.0_enhanced"
+#' )
+#' 
+#' # List all registered prompts
+#' versions <- list_prompt_versions()
+#' print(versions)
+#' }
 register_prompt <- function(system_prompt, 
                           user_prompt_template,
                           version_tag = NULL,
@@ -211,6 +235,30 @@ compare_prompts <- function(prompt_id1, prompt_id2,
 #' @param db_path Path to database file
 #' @return Experiment ID or NULL if failed
 #' @export
+#' @examples
+#' \dontrun{
+#' # Start a baseline experiment
+#' prompt_id <- register_prompt("System prompt", "User template")
+#' 
+#' exp_id <- start_experiment(
+#'   name = "baseline_test_jan2025",
+#'   prompt_version_id = prompt_id,
+#'   model = "gpt-4o-mini",
+#'   dataset_name = "NVDRS_sample_100",
+#'   notes = "Testing baseline prompt on 100 random cases"
+#' )
+#' 
+#' # Run your tests and store results
+#' # ... process narratives ...
+#' # store_experiment_result(exp_id, narrative_id, parsed_result)
+#' 
+#' # Complete the experiment
+#' complete_experiment(exp_id)
+#' 
+#' # View experiment summary
+#' experiments <- list_experiments()
+#' print(experiments[experiments$id == exp_id, ])
+#' }
 start_experiment <- function(name,
                            prompt_version_id,
                            model,

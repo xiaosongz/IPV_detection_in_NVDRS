@@ -9,6 +9,20 @@
 #' @param create Whether to create database if it doesn't exist (default: TRUE)
 #' @return DBI connection object
 #' @export
+#' @examples
+#' \dontrun{
+#' # Basic connection to default database
+#' conn <- get_db_connection()
+#' 
+#' # Connect to specific database file
+#' conn <- get_db_connection("my_results.db")
+#' 
+#' # Connect without creating if doesn't exist
+#' conn <- get_db_connection(create = FALSE)
+#' 
+#' # Always close connections when done
+#' close_db_connection(conn)
+#' }
 get_db_connection <- function(db_path = "llm_results.db", create = TRUE) {
   if (!requireNamespace("DBI", quietly = TRUE)) {
     stop("Package 'DBI' required. Install with: install.packages('DBI')")
@@ -41,6 +55,28 @@ get_db_connection <- function(db_path = "llm_results.db", create = TRUE) {
 #' @param retry_attempts Number of retry attempts on connection failure (default: 3)
 #' @return DBI connection object
 #' @export
+#' @examples
+#' \dontrun{
+#' # Basic PostgreSQL connection (requires .env file)
+#' conn <- connect_postgres()
+#' 
+#' # Custom .env file location
+#' conn <- connect_postgres(env_file = "config/production.env")
+#' 
+#' # Shorter timeout for faster failure
+#' conn <- connect_postgres(timeout = 5)
+#' 
+#' # More retry attempts for unstable connections
+#' conn <- connect_postgres(retry_attempts = 5)
+#' 
+#' # Test the connection
+#' health <- test_connection_health(conn)
+#' if (health$healthy) {
+#'   message("PostgreSQL connection successful")
+#' }
+#' 
+#' close_db_connection(conn)
+#' }
 connect_postgres <- function(env_file = ".env", timeout = 10, retry_attempts = 3) {
   # Check required packages
   if (!requireNamespace("DBI", quietly = TRUE)) {
@@ -116,6 +152,13 @@ connect_postgres <- function(env_file = ".env", timeout = 10, retry_attempts = 3
 #' @param conn DBI connection object
 #' @return TRUE if successful, FALSE otherwise
 #' @export
+#' @examples
+#' \dontrun{
+#' conn <- get_db_connection()
+#' # ... do work with connection ...
+#' success <- close_db_connection(conn)
+#' if (success) message("Connection closed successfully")
+#' }
 close_db_connection <- function(conn) {
   if (!is.null(conn) && DBI::dbIsValid(conn)) {
     DBI::dbDisconnect(conn)
@@ -158,6 +201,21 @@ detect_db_type <- function(conn) {
 #' @param detailed Whether to return detailed diagnostics (default: FALSE)
 #' @return List with connection health status and metrics
 #' @export
+#' @examples
+#' \dontrun{
+#' conn <- get_db_connection()
+#' 
+#' # Quick health check
+#' health <- test_connection_health(conn)
+#' cat("Healthy:", health$healthy, "\n")
+#' cat("Response time:", health$response_time_ms, "ms\n")
+#' 
+#' # Detailed diagnostics
+#' detailed_health <- test_connection_health(conn, detailed = TRUE)
+#' print(detailed_health$connection_info)
+#' 
+#' close_db_connection(conn)
+#' }
 test_connection_health <- function(conn, detailed = FALSE) {
   start_time <- Sys.time()
   result <- list(
@@ -257,6 +315,18 @@ get_unified_connection <- function(db_config = "llm_results.db", type = "auto", 
 #' @param conn DBI connection object
 #' @return TRUE if successful
 #' @export
+#' @examples
+#' \dontrun{
+#' # Setup database schema
+#' conn <- get_db_connection()
+#' ensure_schema(conn)
+#' 
+#' # Verify tables were created
+#' tables <- DBI::dbListTables(conn)
+#' "llm_results" %in% tables  # Should be TRUE
+#' 
+#' close_db_connection(conn)
+#' }
 ensure_schema <- function(conn) {
   # Use new type detection function
   db_type <- detect_db_type(conn)

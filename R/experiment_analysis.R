@@ -12,6 +12,26 @@
 #' @param db_path Path to database file
 #' @return List with metrics including detection rate, confidence, etc.
 #' @export
+#' @examples
+#' \dontrun{
+#' # Analyze experiment performance
+#' metrics <- experiment_metrics(experiment_id = 1)
+#' 
+#' # Basic performance stats
+#' cat("Detection rate:", round(metrics$detection_rate * 100, 1), "%\n")
+#' cat("Average confidence:", round(metrics$avg_confidence, 3), "\n")
+#' cat("Total results:", metrics$total_results, "\n")
+#' cat("Error rate:", round(metrics$error_rate * 100, 1), "%\n")
+#' 
+#' # Accuracy metrics (if ground truth available)
+#' if (!is.null(metrics$accuracy_metrics)) {
+#'   acc <- metrics$accuracy_metrics
+#'   cat("Accuracy:", round(acc$accuracy * 100, 1), "%\n")
+#'   cat("Precision:", round(acc$precision, 3), "\n")
+#'   cat("Recall:", round(acc$recall, 3), "\n")
+#'   cat("F1 Score:", round(acc$f1_score, 3), "\n")
+#' }
+#' }
 experiment_metrics <- function(experiment_id,
                              conn = NULL,
                              db_path = "llm_results.db") {
@@ -122,6 +142,30 @@ experiment_metrics <- function(experiment_id,
 #' @param db_path Path to database file
 #' @return List with comparison results and statistical tests
 #' @export
+#' @examples
+#' \dontrun{
+#' # Compare baseline vs enhanced prompt
+#' comparison <- compare_experiments(exp_id1 = 1, exp_id2 = 2)
+#' 
+#' # Basic comparison
+#' cat("Experiment 1:", comparison$experiment1$name, "\n")
+#' cat("Detection rate:", round(comparison$experiment1$detection_rate * 100, 1), "%\n")
+#' cat("Experiment 2:", comparison$experiment2$name, "\n") 
+#' cat("Detection rate:", round(comparison$experiment2$detection_rate * 100, 1), "%\n")
+#' 
+#' # Statistical significance
+#' if (!is.null(comparison$statistical_tests)) {
+#'   t_test <- comparison$statistical_tests$confidence_t_test
+#'   cat("Confidence difference significant:", t_test$significant, "\n")
+#'   cat("P-value:", round(t_test$p_value, 4), "\n")
+#' }
+#' 
+#' # Accuracy improvements
+#' if (!is.null(comparison$accuracy_comparison)) {
+#'   acc_diff <- comparison$accuracy_comparison$accuracy_diff
+#'   cat("Accuracy improvement:", round(acc_diff * 100, 1), "pp\n")
+#' }
+#' }
 compare_experiments <- function(exp_id1, exp_id2,
                               conn = NULL,
                               db_path = "llm_results.db") {
