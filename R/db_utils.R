@@ -599,10 +599,11 @@ ensure_experiment_schema <- function(conn) {
   schema_file <- system.file("sql", "experiment_schema.sql", package = "IPVdetection")
   
   if (schema_file == "") {
-    # If not installed as package, try local path
-    schema_file <- "inst/sql/experiment_schema.sql"
+    # If not installed as package, use here package for proper path resolution
+    schema_file <- here::here("inst", "sql", "experiment_schema.sql")
     if (!file.exists(schema_file)) {
-      stop("Could not find experiment_schema.sql. Please ensure package is properly installed.")
+      stop("Could not find experiment_schema.sql at: ", schema_file, 
+           ". Please ensure package is properly installed.")
     }
   }
   
