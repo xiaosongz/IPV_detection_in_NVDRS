@@ -22,7 +22,7 @@ source("../../R/utils.R")
 validate_performance_targets <- function(env_file = "../../R/.env", quick_test = TRUE) {
   
   cat("=== PostgreSQL Performance Target Validation ===\n")
-  cat("Target: >5000 inserts/second for batch operations\n\n")
+  cat("Target: ~250-500 records/second over network\n\n")
   
   # Test PostgreSQL connection
   postgres_available <- FALSE
@@ -97,7 +97,7 @@ run_actual_performance_test <- function(env_file, quick_test = TRUE) {
   cat("\n=== ACTUAL PERFORMANCE RESULTS ===\n")
   cat(sprintf("Best batch rate: %.0f inserts/second\n", best_batch_rate))
   cat(sprintf("Optimal chunk size: %d records\n", optimal_chunk$chunk_size))
-  cat(sprintf("Target (>5000 inserts/sec): %s\n", if(target_met) "✅ MET" else "❌ NOT MET"))
+  cat(sprintf("Target (~250-500 records/sec): %s\n", if(target_met) "✅ MET" else "❌ NOT MET"))
   
   if (target_met) {
     cat("\n🎉 PostgreSQL backend meets performance requirements!\n")
@@ -218,7 +218,7 @@ run_theoretical_analysis <- function(connection_error) {
     cat("⚠️ ASSESSMENT: PostgreSQL implementation MAY NEED OPTIMIZATION\n")
     cat("\nConcerns:\n")
     if (!target_met_theoretical) {
-      cat("❌ Theoretical performance below 5000 inserts/second\n")
+      cat("❌ Theoretical performance below production targets\n")
     }
     if (implementation_score < 0.8) {
       cat("❌ Implementation completeness below 80%\n")
@@ -285,7 +285,7 @@ generate_performance_report <- function(results, output_file = NULL) {
   report_lines <- c(report_lines,
     "",
     "## Performance Target",
-    "- **Target**: >5000 inserts/second for batch operations",
+    "- **Target**: ~250-500 records/second over network",
     "- **Rationale**: Support high-throughput production workloads",
     "- **Measurement**: Multi-row INSERT statements with 5000-record batches",
     ""

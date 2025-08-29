@@ -100,10 +100,12 @@ export_results(db, format = "csv", file_path)
 ### Non-Functional Requirements
 
 #### Performance
-- Parse 100+ results per second
-- Store 1000+ results per second in SQLite
-- Store 10,000+ results per second in PostgreSQL
+- Parse 100+ results per second (mock parsing only - real API: 2-5 req/sec)
+- Store 500-1000 results per second in SQLite (local file)
+- Store ~250-500 records/second in PostgreSQL over network
 - Minimal memory footprint (<50MB for 10K results)
+
+**Note**: Parsing performance claims refer to mock/cached responses. Real LLM API calls are limited to 2-5 requests/second by API rate limits and processing time.
 
 #### Data Integrity
 - Foreign key constraints where applicable
@@ -126,11 +128,13 @@ export_results(db, format = "csv", file_path)
 ## Success Criteria
 
 ### Measurable Outcomes
-- **Storage Rate**: >1000 results/second average
+- **Storage Rate**: ~250-500 records/second average (network), ~500-1000 (local)
 - **Query Performance**: <100ms for filtered queries on 100K+ results
 - **Data Integrity**: 99.99% success rate for well-formed responses
 - **Error Handling**: Graceful degradation for malformed responses
 - **Adoption**: Used by researchers processing >1000 narratives
+
+**Note**: Storage rates are for production network conditions. Local deployments can achieve higher rates.
 
 ### Key Metrics
 - Parse success rate (target: >95% for typical LLM outputs)

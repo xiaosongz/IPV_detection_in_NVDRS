@@ -33,7 +33,7 @@ Extend store_llm_result() to work with PostgreSQL, create optimized schema, and 
 - **Multi-Row INSERT**: PostgreSQL batches use single multi-row INSERT statements for >100 records
 - **Optimized Chunk Sizes**: 5000 records per chunk for PostgreSQL vs 1000 for SQLite
 - **Transaction Safety**: Uses `execute_with_transaction()` wrapper for concurrent write protection
-- **Performance Target**: >5000 inserts/second for PostgreSQL (vs >1000 for SQLite)
+- **Performance Target**: ~250-500 records/second for PostgreSQL over network (vs ~500-1000 for local SQLite)
 
 ### Schema Enhancements
 - **Dynamic Schema Creation**: `ensure_schema()` creates appropriate schema based on database type

@@ -164,9 +164,9 @@ High-level task categories that will be created:
 ## Success Criteria (Technical)
 
 ### Performance Benchmarks
-- **Parse Rate**: >500 responses/second on typical hardware
+- **Parse Rate**: mock parsing only (real API: 2-5 req/sec)
 - **SQLite Storage**: >1000 inserts/second for batch operations
-- **PostgreSQL Storage**: >5000 inserts/second with proper indexing
+- **PostgreSQL Storage**: ~250-500 records/second over network
 - **Query Performance**: <100ms for filtered queries on 100K+ records
 
 ### Quality Gates

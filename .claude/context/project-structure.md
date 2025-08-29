@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-29T18:53:57Z
-version: 1.4
+last_updated: 2025-08-29T19:33:02Z
+version: 1.5
 author: Claude Code PM System
 ---
 
@@ -37,9 +37,21 @@ IPV_detection_in_NVDRS/
 │   │   ├── test-db_utils.R          # Database connectivity (SQLite/PostgreSQL)
 │   │   ├── test-store_llm_result.R  # Result storage testing
 │   │   └── test-detect_ipv.R        # Core IPV detection logic
+│   ├── integration/      # Integration test suite (Issue #6)
+│   │   ├── helpers/      # Test data and mock helpers
+│   │   ├── test_full_workflow.R     # End-to-end workflow testing
+│   │   ├── test_error_scenarios.R   # Error handling validation
+│   │   ├── test_database_backends.R # SQLite/PostgreSQL comparison
+│   │   ├── test_concurrent_access.R # Concurrent access testing
+│   │   ├── test_production_scenarios.R # Production readiness
+│   │   └── run_integration_tests.R  # Test runner with reporting
 │   ├── performance/      # Performance benchmarks
 │   │   ├── benchmark_postgres.R     # PostgreSQL performance testing
+│   │   ├── integration_benchmarks.R # Component benchmarking
+│   │   ├── load_testing.R          # High-volume load testing
+│   │   ├── memory_profiling.R      # Memory leak detection
 │   │   └── validate_performance_targets.R  # Performance validation
+│   ├── PERFORMANCE_REALITY_CHECK.md # Honest performance documentation
 │   └── *.R              # Test utility scripts
 ├── R/                    # Core R functions (modular)
 │   ├── 0_setup.R         # Direct execution setup script
@@ -130,6 +142,7 @@ Following Unix philosophy with modular design, the project now consists of:
 Clean package structure without complex hierarchies or magic.
 
 ## Update History
+- 2025-08-29 (19:33): Added comprehensive integration and performance test suites from Issue #6
 - 2025-08-29: Test suite cleaned and optimized - removed 2 outdated files, streamlined 6 core test files
 - 2025-08-29: Performance benchmarks directory updated with PostgreSQL-specific testing tools
 - 2025-08-28: Added R package structure with modular functions, comprehensive testing framework, and JSON-based configuration while maintaining Unix philosophy
