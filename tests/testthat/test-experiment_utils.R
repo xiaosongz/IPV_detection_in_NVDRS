@@ -1,3 +1,10 @@
+# Source required functions
+library(here)
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "db_utils.R"))
+source(here::here("R", "experiment_utils.R"))
+source(here::here("R", "experiment_analysis.R"))
+
 test_that("register_prompt creates new prompt version", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
@@ -90,8 +97,11 @@ test_that("get_prompt retrieves correct prompt", {
   expect_equal(retrieved$user_prompt_template, "User {text}")
   expect_equal(retrieved$version_tag, "retrieve_test")
   
-  # Test non-existent prompt
-  missing <- get_prompt(99999, db_path = db_file)
+  # Test non-existent prompt - should warn and return NULL
+  expect_warning(
+    missing <- get_prompt(99999, db_path = db_file),
+    "Prompt version ID 99999 not found"
+  )
   expect_null(missing)
   
   # Clean up

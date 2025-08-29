@@ -1,3 +1,10 @@
+# Source required functions
+library(here)
+source(here::here("R", "0_setup.R"))
+source(here::here("R", "db_utils.R"))
+source(here::here("R", "experiment_utils.R"))
+source(here::here("R", "experiment_analysis.R"))
+
 test_that("experiment_metrics calculates basic metrics", {
   skip_if_not_installed("DBI")
   skip_if_not_installed("RSQLite")
