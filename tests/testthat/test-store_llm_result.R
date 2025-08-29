@@ -210,3 +210,210 @@ test_that("trimws is applied to narrative_text", {
   close_db_connection(conn)
   unlink(db_file)
 })
+
+test_that("store_llm_result works with unified connection (auto-detection)", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RSQLite")
+  
+  db_file <- tempfile(fileext = ".db")
+  
+  # Create sample parsed result
+  parsed_result <- list(
+    narrative_id = "UNIFIED001",
+    narrative_text = "Test unified connection",
+    detected = TRUE,
+    confidence = 0.85,
+    model = "gpt-4"
+  )
+  
+  # Should auto-detect SQLite from string path
+  result <- store_llm_result(parsed_result, db_path = db_file)
+  expect_true(result$success)
+  expect_equal(result$rows_inserted, 1)
+  
+  # Verify connection type detection
+  conn <- get_unified_connection(db_file)
+  db_type <- detect_db_type(conn)
+  expect_equal(db_type, "sqlite")
+  
+  # Clean up
+  close_db_connection(conn)
+  unlink(db_file)
+})
+
+test_that("batch operations work with database type detection", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RSQLite")
+  
+  db_file <- tempfile(fileext = ".db")
+  
+  # Create batch of results
+  batch_results <- lapply(1:50, function(i) {
+    list(
+      narrative_id = sprintf("DETECT%03d", i),
+      narrative_text = sprintf("Narrative %d", i),
+      detected = i %% 2 == 0,
+      confidence = runif(1),
+      model = "gpt-4"
+    )
+  })
+  
+  # Store batch with auto chunk sizing
+  result <- store_llm_results_batch(batch_results, db_path = db_file)
+  expect_true(result$success)
+  expect_equal(result$inserted, 50)
+  
+  # Verify stored data
+  conn <- get_db_connection(db_file)
+  count <- DBI::dbGetQuery(conn, "SELECT COUNT(*) as n FROM llm_results")
+  expect_equal(count$n, 50)
+  
+  # Clean up
+  close_db_connection(conn)
+  unlink(db_file)
+})
+
+# PostgreSQL tests - only run if PostgreSQL is available
+test_that("store_llm_result works with PostgreSQL backend", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RPostgres")
+  skip_if_not(file.exists(".env"), "PostgreSQL tests require .env file")
+  
+  # Skip if PostgreSQL connection fails
+  skip_if(tryCatch({
+    conn <- connect_postgres()
+    close_db_connection(conn)
+    FALSE
+  }, error = function(e) TRUE), "PostgreSQL connection not available")
+  
+  # Create sample parsed result
+  parsed_result <- list(
+    narrative_id = "PG_TEST001",
+    narrative_text = "PostgreSQL test narrative",
+    detected = TRUE,
+    confidence = 0.92,
+    model = "gpt-4",
+    prompt_tokens = 120,
+    completion_tokens = 80,
+    total_tokens = 200
+  )
+  
+  # Store with PostgreSQL connection
+  conn <- connect_postgres()
+  ensure_schema(conn)
+  
+  result <- store_llm_result(parsed_result, conn = conn, auto_close = FALSE)
+  expect_true(result$success)
+  
+  # Verify database type detection
+  db_type <- detect_db_type(conn)
+  expect_equal(db_type, "postgresql")
+  
+  # Verify stored data
+  stored <- DBI::dbGetQuery(conn, "SELECT * FROM llm_results WHERE narrative_id = 'PG_TEST001'")
+  expect_equal(nrow(stored), 1)
+  expect_equal(stored$narrative_id, "PG_TEST001")
+  expect_equal(stored$detected, TRUE)
+  expect_equal(stored$confidence, 0.92)
+  
+  # Test duplicate handling (PostgreSQL ON CONFLICT)
+  result2 <- store_llm_result(parsed_result, conn = conn, auto_close = FALSE)
+  expect_true(result2$success)
+  expect_true(!is.null(result2$warning))
+  
+  # Clean up test data
+  DBI::dbExecute(conn, "DELETE FROM llm_results WHERE narrative_id = 'PG_TEST001'")
+  close_db_connection(conn)
+})
+
+test_that("batch operations are optimized for PostgreSQL", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RPostgres")
+  skip_if_not(file.exists(".env"), "PostgreSQL tests require .env file")
+  
+  # Skip if PostgreSQL connection fails
+  skip_if(tryCatch({
+    conn <- connect_postgres()
+    close_db_connection(conn)
+    FALSE
+  }, error = function(e) TRUE), "PostgreSQL connection not available")
+  
+  # Create larger batch to trigger PostgreSQL optimization
+  batch_results <- lapply(1:150, function(i) {
+    list(
+      narrative_id = sprintf("PG_BATCH%03d", i),
+      narrative_text = sprintf("PostgreSQL batch narrative %d", i),
+      detected = i %% 3 != 0,
+      confidence = runif(1, 0.1, 0.99),
+      model = "gpt-4-turbo"
+    )
+  })
+  
+  # Use existing connection to test performance
+  conn <- connect_postgres()
+  ensure_schema(conn)
+  
+  # Measure performance
+  start_time <- Sys.time()
+  result <- store_llm_results_batch(batch_results, conn = conn)
+  elapsed <- as.numeric(Sys.time() - start_time, units = "secs")
+  
+  expect_true(result$success)
+  expect_equal(result$inserted, 150)
+  expect_equal(result$duplicates, 0)
+  expect_equal(result$errors, 0)
+  
+  # Should be fast for PostgreSQL (target: >5000 inserts/sec)
+  expect_lt(elapsed, 0.05)  # 150 records in < 50ms
+  
+  # Verify all records stored
+  count <- DBI::dbGetQuery(conn, "SELECT COUNT(*) as n FROM llm_results WHERE narrative_id LIKE 'PG_BATCH%'")
+  expect_equal(count$n, 150)
+  
+  # Clean up test data
+  DBI::dbExecute(conn, "DELETE FROM llm_results WHERE narrative_id LIKE 'PG_BATCH%'")
+  close_db_connection(conn)
+})
+
+test_that("concurrent writes work with transaction support", {
+  skip_if_not_installed("DBI")
+  skip_if_not_installed("RSQLite")
+  
+  db_file <- tempfile(fileext = ".db")
+  
+  # Create test data
+  parsed_result1 <- list(
+    narrative_id = "CONCURRENT001",
+    narrative_text = "Concurrent test 1",
+    detected = TRUE,
+    model = "gpt-4"
+  )
+  
+  parsed_result2 <- list(
+    narrative_id = "CONCURRENT002", 
+    narrative_text = "Concurrent test 2",
+    detected = FALSE,
+    model = "gpt-4"
+  )
+  
+  # Use shared connection with transaction support
+  conn <- get_db_connection(db_file)
+  ensure_schema(conn)
+  
+  # Test transaction wrapper
+  result <- execute_with_transaction(conn, {
+    store_llm_result(parsed_result1, conn = conn, auto_close = FALSE)
+    store_llm_result(parsed_result2, conn = conn, auto_close = FALSE)
+    list(success = TRUE, message = "Both stored")
+  })
+  
+  expect_true(result$success)
+  
+  # Verify both records stored
+  count <- DBI::dbGetQuery(conn, "SELECT COUNT(*) as n FROM llm_results WHERE narrative_id LIKE 'CONCURRENT%'")
+  expect_equal(count$n, 2)
+  
+  # Clean up
+  close_db_connection(conn)
+  unlink(db_file)
+})
