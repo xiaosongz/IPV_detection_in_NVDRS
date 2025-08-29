@@ -77,13 +77,18 @@ dbDisconnect(conn)
 - Handles malformed responses gracefully
 
 **`store_llm_result(parsed_result, conn = NULL)`**
-- Stores parsed result in SQLite database
+- Stores parsed result in database (SQLite or PostgreSQL)
 - Auto-creates schema if missing
 - Returns TRUE on success
 
-**`connect_db(db_path = NULL)`**
+**`connect_db(db_path = NULL)`** (SQLite)
 - Creates/connects to SQLite database
 - Default: "llm_results.db" in project root
+- Returns DBI connection object
+
+**`connect_postgres(env_file = ".env")`** (PostgreSQL)
+- Connects to PostgreSQL using .env configuration
+- Reads credentials from environment variables
 - Returns DBI connection object
 
 ### Experiment Functions (Optional)
@@ -137,7 +142,7 @@ Four tables for R&D:
 ### Batch Processing
 
 ```r
-# You control the loop
+# Traditional approach
 data <- read_excel("narratives.xlsx")
 conn <- connect_db()
 
@@ -146,6 +151,23 @@ for (i in 1:nrow(data)) {
   parsed <- parse_llm_result(result$response, data$id[i])
   store_llm_result(parsed, conn)
 }
+
+dbDisconnect(conn)
+
+# Tidyverse approach with purrr
+library(tidyverse)
+data <- read_excel("narratives.xlsx")
+conn <- connect_db()
+
+data |>
+  mutate(
+    llm_result = map2(narrative, id, ~{
+      call_llm(.x, system_prompt) |>
+        parse_llm_result(narrative_id = .y)
+    })
+  ) |>
+  pull(llm_result) |>
+  walk(~store_llm_result(.x, conn))
 
 dbDisconnect(conn)
 ```
@@ -234,6 +256,7 @@ print(comparison$summary)
 ### Basic Queries
 
 ```r
+# Traditional SQL approach
 conn <- connect_db()
 
 # Count IPV detections
@@ -248,6 +271,30 @@ recent <- dbGetQuery(conn, "
   ORDER BY created_at DESC 
   LIMIT 10
 ")
+
+# Tidyverse approach with dplyr
+library(tidyverse)
+library(DBI)
+
+# Connect and use dplyr
+conn <- connect_db()
+results_tbl <- tbl(conn, "llm_results")
+
+# Count IPV detections
+results_tbl |>
+  filter(detected == TRUE) |>
+  count()
+
+# Average confidence
+results_tbl |>
+  filter(detected == TRUE) |>
+  summarise(avg_confidence = mean(confidence, na.rm = TRUE))
+
+# Recent results
+recent <- results_tbl |>
+  arrange(desc(created_at)) |>
+  head(10) |>
+  collect()
 ```
 
 ### Experiment Queries
@@ -303,22 +350,42 @@ print(parsed$error)  # See what went wrong
 2. **Start simple** - Use basic mode until you need experiments
 3. **No magic** - Every function does one clear thing
 4. **Compose freely** - Mix with any R packages you like
-5. **30 lines** - Core detection is still just 30 lines
+5. **Minimal** - Core detection remains minimal and focused
 
-## Why Not PostgreSQL?
+## Database Options
 
-Following Unix philosophy:
-- SQLite is zero-configuration
+### SQLite (Default - Simple)
+- Zero-configuration
 - Works on every system
 - No server to manage
-- Sufficient for millions of records
+- Perfect for single-user research
 
-If you need PostgreSQL, wrap our functions:
+### PostgreSQL (Scalable)
+- Multi-user support
+- Better concurrent writes
+- Production-ready
+- Network accessible
+
+Both databases are fully supported through the DBI interface:
 ```r
-# Your PostgreSQL wrapper (you control it)
-store_to_postgres <- function(parsed, pg_conn) {
-  # Your PostgreSQL-specific code
-}
+# SQLite connection
+conn_sqlite <- DBI::dbConnect(RSQLite::SQLite(), "results.db")
+
+# PostgreSQL connection (using .env)
+library(dotenv)
+load_dot_env()
+conn_pg <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  host = Sys.getenv("POSTGRES_HOST"),
+  port = as.integer(Sys.getenv("POSTGRES_PORT")),
+  dbname = Sys.getenv("POSTGRES_DB"),
+  user = Sys.getenv("POSTGRES_USER"),
+  password = Sys.getenv("POSTGRES_PASSWORD")
+)
+
+# Both work the same way
+store_llm_result(parsed, conn_sqlite)  # SQLite
+store_llm_result(parsed, conn_pg)      # PostgreSQL
 ```
 
 ## Summary

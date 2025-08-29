@@ -32,7 +32,7 @@ Following Linus Torvalds' concept of "good taste":
 ## Long-Term Goals
 
 ### Maintain Simplicity
-- **Forever <50 lines**: Core function never grows
+- **Minimal code**: Core function stays focused and clean
 - **Zero frameworks**: No architectural astronautics
 - **User ownership**: They control their destiny
 
@@ -74,12 +74,7 @@ result <- detect_ipv("narrative text")
 - Custom confidence thresholds
 - Integration with research pipelines
 
-### What We Won't Do
-- ❌ Build a platform
-- ❌ Add features
-- ❌ Create dependencies
-- ❌ Implement workflows
-- ❌ Manage data
+
 
 ## Strategic Priorities
 
@@ -124,7 +119,7 @@ result <- detect_ipv("narrative text")
 ## Sustainability Model
 
 ### Technical Sustainability
-- No maintenance burden (30 lines)
+- No maintenance burden (minimal code)
 - No dependencies to update
 - No security vulnerabilities
 - No technical debt
@@ -156,14 +151,6 @@ result <- detect_ipv("narrative text")
 - Feature creep
 - Complexity worship
 
-## The Anti-Vision
-
-### What This Will Never Become
-- ❌ An IPV detection "platform"
-- ❌ A SaaS product
-- ❌ An R package with 50 dependencies
-- ❌ A framework for text analysis
-- ❌ A complex system requiring documentation
 
 ### Why This Matters
 Every line of code is:
@@ -197,6 +184,4 @@ Every line of code is:
 
 > "Perfection is achieved, not when there is nothing more to add, but when there is nothing left to take away." - Antoine de Saint-Exupéry
 
-This project has reached that point. 30 lines that solve a real problem. No more, no less.
-
-The vision is not to grow, but to remain perfectly simple while enabling complex research. The code is done. The impact has just begun.
+The vision is not to grow, but to remain perfectly simple while enabling complex research.

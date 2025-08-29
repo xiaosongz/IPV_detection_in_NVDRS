@@ -7,6 +7,8 @@ author: Claude Code PM System
 
 # Project Style Guide
 
+USE Tidyverse style guide! 
+
 ## Core Principle
 **"Good taste"** - Code that eliminates special cases and unnecessary complexity.
 
@@ -130,26 +132,30 @@ config <- list(
 
 ## Testing Style
 
-### User Testing
+### Testing with testthat
 ```r
-# Users write their own simple tests
-result <- detect_ipv("test narrative")
-stopifnot(is.list(result))
-stopifnot(!is.null(result$detected))
+# Use testthat for comprehensive testing
+test_that("detect_ipv returns expected structure", {
+  result <- detect_ipv("test narrative")
+  expect_type(result, "list")
+  expect_true("detected" %in% names(result))
+  expect_true("confidence" %in% names(result))
+})
 ```
 
-### No Testing Frameworks
-- ❌ No testthat
-- ❌ No coverage requirements
-- ❌ No CI/CD pipelines
-- ✅ Simple assertions
+### Testing Best Practices
+- ✅ Use testthat for unit tests
+- ✅ Write meaningful tests that catch real bugs
+- ✅ Test edge cases and error conditions
+- ✅ Keep tests simple and focused
+- ✅ CI/CD pipelines welcome for automation
 
 ## Git & Version Control
 
 ### Commit Messages
 ```
 # GOOD - Clear and concise
-Simplify to Unix philosophy: 30-line implementation
+Simplify to Unix philosophy: minimal implementation
 Remove unnecessary abstraction layers
 Fix NA handling in empty narratives
 
@@ -235,7 +241,7 @@ results <- parallel::mclapply(texts, detect_ipv)
 
 Before accepting code:
 1. ✅ Does it remove more than it adds?
-2. ✅ Is it under 50 lines?
+2. ✅ Is it minimal and focused?
 3. ✅ Does it eliminate special cases?
 4. ✅ Can a user understand it in 2 minutes?
 5. ✅ Does it maintain backward compatibility?
@@ -246,7 +252,7 @@ Before accepting code:
 - **Simplicity > Features**
 - **Clarity > Cleverness**  
 - **User Control > Framework Magic**
-- **30 Lines > 10,000 Lines**
+- **Minimal > Complex**
 
 ### Never Forget
 > "Programs must be written for people to read, and only incidentally for machines to execute." - SICP
@@ -255,4 +261,4 @@ But also:
 
 > "Talk is cheap. Show me the code." - Linus Torvalds
 
-This project shows the code. 30 lines. Done.
+This project shows the code. Minimal. Done.

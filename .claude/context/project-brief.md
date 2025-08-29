@@ -8,7 +8,7 @@ author: Claude Code PM System
 # Project Brief
 
 ## Executive Summary
-A minimalist R function that detects intimate partner violence (IPV) in death investigation narratives using Large Language Models. Following Unix philosophy, the entire solution is 30 lines of code.
+A minimalist R function that detects intimate partner violence (IPV) in death investigation narratives using Large Language Models. Following Unix philosophy, the solution is minimal and focused.
 
 ## Problem Statement
 
@@ -31,7 +31,7 @@ Public health researchers need to identify IPV-related deaths in large datasets 
 One function that sends narrative text to an LLM and returns IPV detection results. That's it.
 
 ### Key Innovation
-**Radical Simplicity** - Rejected 10,000+ lines of framework code for 30 lines that do the job.
+**Radical Simplicity** - Rejected 10,000+ lines of framework code for minimal code that does the job.
 
 ### Technical Approach
 ```r
@@ -63,7 +63,7 @@ Text → LLM API → Structured Response → Result
 - [x] Work with local or cloud LLMs
 
 ### Design Success
-- [x] Under 50 lines of code
+- [x] Minimal, focused code
 - [x] Zero framework dependencies
 - [x] User controls everything
 - [x] Clear, readable implementation
@@ -94,7 +94,7 @@ Text → LLM API → Structured Response → Result
 - ✅ Initial complex implementation (10,000+ lines)
 - ✅ Testing with 289 cases
 - ✅ Achieved 70% accuracy
-- ✅ Radical simplification to 30 lines
+- ✅ Radical simplification to minimal implementation
 - ✅ Documentation and examples
 
 ### Current Status
@@ -187,4 +187,4 @@ Text → LLM API → Structured Response → Result
 
 ## Conclusion
 
-This project proves that complex problems don't require complex solutions. By following Unix philosophy and rejecting over-engineering, we've created a tool that is powerful, flexible, and refreshingly simple. The 30-line implementation is not a prototype - it's the final product.
+This project proves that complex problems don't require complex solutions. By following Unix philosophy and rejecting over-engineering, we've created a tool that is powerful, flexible, and refreshingly simple. The minimal implementation is not a prototype - it's the final product.

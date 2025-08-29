@@ -1,12 +1,12 @@
 # Ultimate Clean IPV Detection
 # "Do ONE thing well" - Unix Philosophy
-# Total: ~30 lines of actual code
+# Minimal implementation focused on simplicity
 
 # ============================================================
 # THE ONLY FUNCTION YOU NEED
 # ============================================================
 detect_ipv <- function(text, config = NULL) {
-  # 默认配置 - 简单的list
+  # Default config - simple list
   if (is.null(config)) {
     config <- list(
       api_url = Sys.getenv("LLM_API_URL", "http://192.168.10.22:1234/v1/chat/completions"),
@@ -16,15 +16,15 @@ detect_ipv <- function(text, config = NULL) {
     )
   }
   
-  # 空输入 = 空输出
+  # Empty input = empty output
   if (is.null(text) || is.na(text) || trimws(text) == "") {
     return(list(detected = NA, confidence = 0, error = "empty input"))
   }
   
-  # 构建提示
+  # Build prompt
   prompt <- sprintf(config$prompt_template, trimws(text))
   
-  # 调用API并返回
+  # Call API and return
   tryCatch({
     response <- httr2::request(config$api_url) |>
       httr2::req_body_json(list(
@@ -34,7 +34,7 @@ detect_ipv <- function(text, config = NULL) {
       httr2::req_perform() |>
       httr2::resp_body_json()
     
-    # 返回解析的结果
+    # Return parsed result
     jsonlite::fromJSON(response$choices[[1]]$message$content)
     
   }, error = function(e) {
@@ -43,23 +43,23 @@ detect_ipv <- function(text, config = NULL) {
 }
 
 # ============================================================
-# 就这样。一个函数。30行。完成。
+# That's it. One function. Clean and simple. Done.
 # ============================================================
 
-# 用户自己决定怎么用：
+# Users decide how to use it:
 # 
-# 单个检测：
+# Single detection:
 #   result <- detect_ipv("narrative text here")
 #
-# 批量处理（用户自己写）：
+# Batch processing (user writes):
 #   df$ipv_result <- lapply(df$narrative, detect_ipv)
 #
-# 自定义提示词：
+# Custom prompt:
 #   my_config <- list(
 #     api_url = "http://my-llm:8080/v1/chat/completions",
 #     model = "llama-70b",
-#     prompt_template = "我的自定义提示词：%s"
+#     prompt_template = "My custom prompt: %s"
 #   )
 #   result <- detect_ipv(text, my_config)
 #
-# 就是这么简单。
+# It's that simple.

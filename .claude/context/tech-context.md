@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-28T13:33:43Z
-version: 1.1
+last_updated: 2025-08-29T16:33:40Z
+version: 1.2
 author: Claude Code PM System
 ---
 
@@ -11,6 +11,7 @@ author: Claude Code PM System
 - **R** (Statistical Computing Language)
 - **Version**: R 4.0+ recommended
 - **IDE**: RStudio (optional, any text editor works)
+- **Style Guide**: Tidyverse (enforced as of v0.2.0)
 
 ## Core Dependencies
 
@@ -19,25 +20,33 @@ author: Claude Code PM System
 # API and parsing
 install.packages(c("httr2", "jsonlite"))
 
-# Database storage (new)
-install.packages(c("DBI", "RSQLite"))
+# Database storage
+install.packages(c("DBI", "RSQLite", "RPostgres", "digest"))
 ```
 
-1. **httr2** - HTTP client for API calls
+1. **httr2** (>= 1.0.0) - HTTP client for API calls
    - Purpose: Send requests to LLM API
    - Usage: POST requests to chat completion endpoints
 
-2. **jsonlite** - JSON parsing
+2. **jsonlite** (>= 1.8.0) - JSON parsing
    - Purpose: Parse LLM responses
    - Usage: Convert JSON strings to R objects
 
-3. **DBI** - Database interface (new)
+3. **DBI** - Database interface
    - Purpose: Abstract database operations
    - Usage: Connect to and query databases
 
-4. **RSQLite** - SQLite driver (new)
+4. **RSQLite** - SQLite driver
    - Purpose: SQLite database backend
-   - Usage: Zero-configuration data storage
+   - Usage: Zero-configuration local storage
+
+5. **RPostgres** - PostgreSQL driver
+   - Purpose: PostgreSQL database backend  
+   - Usage: Scalable, multi-user database
+
+6. **digest** - Cryptographic hash functions
+   - Purpose: Generate content hashes for prompt deduplication
+   - Usage: SHA-256 hashing in experiment tracking
 
 ### Testing Packages
 ```r

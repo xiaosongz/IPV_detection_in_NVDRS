@@ -1,14 +1,14 @@
 # Clean IPV Detection Implementation
 # "Good taste" version - by Linus standards
-# Total: ~100 lines of actual code
+# Extended implementation with batching support
 
 # ============================================================
-# CONFIG - 外部化所有变量
+# CONFIG - Externalize all variables
 # ============================================================
 load_config <- function(path = Sys.getenv("CONFIG_PATH", "config.yml")) {
   config <- yaml::read_yaml(path)
   
-  # 环境变量覆盖
+  # Environment variable overrides
   config$api$url <- Sys.getenv("LLM_API_URL", config$api$url)
   config$api$model <- Sys.getenv("LLM_MODEL", config$api$model)
   
@@ -16,30 +16,30 @@ load_config <- function(path = Sys.getenv("CONFIG_PATH", "config.yml")) {
 }
 
 # ============================================================
-# CORE - 唯一重要的函数
+# CORE - The only important function
 # ============================================================
 detect_ipv <- function(narrative, 
                       type = c("LE", "CME"), 
                       config = NULL) {
   
-  # 参数处理 - 无特殊情况
+  # Parameter handling - no special cases
   if (is.null(config)) config <- load_config()
   type <- match.arg(type)
   narrative <- trimws(narrative)
   
-  # 空值直接返回 - 不是特殊情况，是正常流程
+  # Empty value returns directly - not a special case, normal flow
   if (is.na(narrative) || narrative == "") {
     return(list(detected = NA, confidence = 0, reason = "empty"))
   }
   
-  # 构建请求 - 简单直接
+  # Build request - simple and direct
   prompt <- sprintf(
     "Analyze this %s narrative for intimate partner violence indicators: %s\n
     Respond with JSON: {detected: boolean, confidence: 0-1, indicators: []}",
     type, narrative
   )
   
-  # API调用 - 一次成功或失败
+  # API call - succeed or fail once
   response <- tryCatch({
     httr2::request(config$api$url) |>
       httr2::req_body_json(list(
@@ -54,12 +54,12 @@ detect_ipv <- function(narrative,
     list(error = e$message)
   })
   
-  # 解析响应 - 无分支
+  # Parse response - no branching
   if (!is.null(response$error)) {
     return(list(detected = NA, confidence = 0, error = response$error))
   }
   
-  # 提取结果
+  # Extract results
   content <- response$choices[[1]]$message$content
   if (is.character(content)) {
     content <- jsonlite::fromJSON(content, simplifyVector = FALSE)
@@ -73,16 +73,16 @@ detect_ipv <- function(narrative,
 }
 
 # ============================================================
-# BATCH - 向量化处理
+# BATCH - Vectorized processing
 # ============================================================
 process_narratives <- function(data, config = NULL) {
   if (is.null(config)) config <- load_config()
   
-  # 简单的向量化 - R的强项
+  # Simple vectorization - R's strength
   data$ipv_le <- lapply(data$NarrativeLE, detect_ipv, type = "LE", config = config)
   data$ipv_cme <- lapply(data$NarrativeCME, detect_ipv, type = "CME", config = config)
   
-  # 组合结果 - 一行搞定
+  # Combine results - one line
   data$ipv_final <- mapply(function(le, cme) {
     w <- config$weights %||% c(le = 0.4, cme = 0.6)
     score <- le$confidence * w["le"] + cme$confidence * w["cme"]
@@ -97,13 +97,13 @@ process_narratives <- function(data, config = NULL) {
 }
 
 # ============================================================
-# UTILS - 最小辅助
+# UTILS - Minimal helpers
 # ============================================================
 
-# NULL合并操作符 - 消除if-else
+# NULL coalescing operator - eliminates if-else
 `%||%` <- function(x, y) if (is.null(x) || length(x) == 0) y else x
 
-# 简单的进度显示
+# Simple progress display
 with_progress <- function(x, fn, ...) {
   pb <- txtProgressBar(min = 0, max = length(x), style = 3)
   on.exit(close(pb))
@@ -115,24 +115,24 @@ with_progress <- function(x, fn, ...) {
 }
 
 # ============================================================
-# MAIN - 用户接口
+# MAIN - User interface
 # ============================================================
 analyze_ipv <- function(input_file, output_file = NULL) {
-  # 读取
+  # Read
   data <- read.csv(input_file, stringsAsFactors = FALSE)
   
-  # 处理
+  # Process
   results <- process_narratives(data)
   
-  # 输出
+  # Output
   if (!is.null(output_file)) {
-    # 展平嵌套列表用于CSV输出
+    # Flatten nested lists for CSV output
     results$ipv_le_detected <- sapply(results$ipv_le, `[[`, "detected")
     results$ipv_cme_detected <- sapply(results$ipv_cme, `[[`, "detected")
     results$ipv_final_detected <- sapply(results$ipv_final, `[[`, "detected")
     results$ipv_final_confidence <- sapply(results$ipv_final, `[[`, "confidence")
     
-    # 删除列表列
+    # Remove list columns
     results$ipv_le <- results$ipv_cme <- results$ipv_final <- NULL
     
     write.csv(results, output_file, row.names = FALSE)
@@ -142,12 +142,12 @@ analyze_ipv <- function(input_file, output_file = NULL) {
 }
 
 # ============================================================
-# 就这些。没有更多了。
+# That's all. Nothing more.
 # ============================================================
 
-# 使用示例：
+# Usage example:
 # results <- analyze_ipv("data.csv", "results.csv")
 
-# 这就是全部。100行解决所有问题。
-# 没有R6类，没有S4方法，没有复杂继承。
-# 只有函数，数据，和清晰的流程。
+# That's all. Solves everything in minimal lines.
+# No R6 classes, no S4 methods, no complex inheritance.
+# Just functions, data, and clear flow.
