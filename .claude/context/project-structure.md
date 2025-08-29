@@ -18,8 +18,8 @@ IPV_detection_in_NVDRS/
 ├── data-raw/             # Raw data files
 │   └── suicide_IPV_manuallyflagged.xlsx  # Test dataset with manual flags
 ├── docs/                 # Core implementation files
-│   ├── ULTIMATE_CLEAN.R     # Primary 30-line implementation
-│   ├── CLEAN_IMPLEMENTATION.R # Alternative 100-line version
+│   ├── ULTIMATE_CLEAN.R     # Primary minimal implementation
+│   ├── CLEAN_IMPLEMENTATION.R # Extended version with batching
 │   ├── LLM_RESPONSE_ANALYSIS.md # Analysis of LLM response structures
 │   ├── PROMPT_STRUCTURE_ANALYSIS.md # Prompt engineering documentation
 │   ├── EXPERIMENT_MODE_GUIDE.md # Complete guide for R&D experiment tracking
@@ -47,14 +47,14 @@ IPV_detection_in_NVDRS/
 │   ├── build_prompt.R    # Message formatting function
 │   ├── call_llm.R       # LLM API interface function
 │   ├── parse_llm_result.R # Parse LLM responses to structured data
-│   ├── db_utils.R       # SQLite database connection utilities
+│   ├── db_utils.R       # Database connection utilities (SQLite & PostgreSQL)
 │   ├── store_llm_result.R # Store parsed results in database
 │   ├── experiment_utils.R # Prompt versioning and experiment management
 │   ├── experiment_analysis.R # Statistical comparison and A/B testing
 │   └── IPVdetection-package.R # Package metadata
 ├── inst/                 # Package installed files
 │   └── sql/             # SQL schema and migrations
-│       ├── schema.sql   # Basic SQLite database schema
+│       ├── schema.sql   # Basic database schema (SQLite/PostgreSQL compatible)
 │       └── experiment_schema.sql # R&D experiment tracking schema
 ├── README.md             # Project documentation
 ├── CLAUDE.md            # Claude Code specific instructions
@@ -75,7 +75,7 @@ IPV_detection_in_NVDRS/
 ### `/docs` - Legacy Implementation & Documentation  
 - **Purpose**: Contains reference implementations and documentation
 - **Key Files**: 
-  - `ULTIMATE_CLEAN.R` - Original 30-line implementation
+  - `ULTIMATE_CLEAN.R` - Original minimal implementation
   - `CLEAN_IMPLEMENTATION.R` - Extended version with batching support
 - **Philosophy**: Historical reference, actual code now in `/R`
 
@@ -86,7 +86,7 @@ IPV_detection_in_NVDRS/
 
 ### `/logs` - Operational Logs
 - **Purpose**: Track API calls and debugging information
-- **Format**: SQLite database or text logs
+- **Format**: Database (SQLite/PostgreSQL) or text logs
 - **Usage**: User-controlled logging for troubleshooting
 
 ### `/results` - Output Storage

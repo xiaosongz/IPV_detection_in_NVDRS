@@ -184,17 +184,26 @@ safe_call <- function(user_prompt, system_prompt) {
 
 ## Testing Pattern
 
-### User-Controlled Testing
+### Comprehensive Testing with testthat
 ```r
-# User writes their own tests
-test_result <- call_llm("test narrative", "Detect IPV")
-stopifnot(is.list(test_result))
-stopifnot(!is.null(test_result$response))
+# Professional testing with testthat
+test_that("call_llm handles valid input correctly", {
+  test_result <- call_llm("test narrative", "Detect IPV")
+  expect_type(test_result, "list")
+  expect_true("response" %in% names(test_result))
+})
+
+test_that("call_llm handles errors gracefully", {
+  result <- call_llm("", "Detect IPV")
+  expect_true(!is.null(result$error) || is.na(result$detected))
+})
 ```
 
 **Philosophy**:
-- User validates as needed
-- Simple assertions sufficient
+- Professional testing with testthat
+- Test edge cases and error conditions
+- Ensure functions work correctly in isolation
+- CI/CD integration for continuous quality
 
 ## Performance Patterns
 

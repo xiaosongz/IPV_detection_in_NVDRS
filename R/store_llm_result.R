@@ -1,6 +1,6 @@
-#' Store LLM result in SQLite database
+#' Store LLM result in database
 #' 
-#' Simple storage function following Unix philosophy.
+#' Simple storage function following Unix philosophy and tidyverse style.
 #' Takes parsed result, stores it, returns success/failure.
 #' 
 #' @param parsed_result List from parse_llm_result()
@@ -36,8 +36,8 @@ store_llm_result <- function(parsed_result,
     })
   }
   
-  # Prepare data for insertion
-  insert_data <- list(
+  # Prepare data for insertion using tidyverse style
+  insert_data <- tibble::tibble(
     narrative_id = parsed_result$narrative_id %||% NA_character_,
     narrative_text = trimws(parsed_result$narrative_text %||% NA_character_),
     detected = as.logical(parsed_result$detected),
@@ -49,7 +49,8 @@ store_llm_result <- function(parsed_result,
     response_time_ms = as.integer(parsed_result$response_time_ms %||% NA_integer_),
     raw_response = parsed_result$raw_response %||% NA_character_,
     error_message = parsed_result$error_message %||% NA_character_
-  )
+  ) |>
+    dplyr::slice(1)  # Ensure single row
   
   # Build SQL
   sql <- "
@@ -156,7 +157,4 @@ store_llm_results_batch <- function(parsed_results,
   )
 }
 
-# Helper for NULL coalescing
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0 || (is.character(x) && !nzchar(x[1]))) y else x
-}
+# NULL coalescing operator is now defined in utils.R

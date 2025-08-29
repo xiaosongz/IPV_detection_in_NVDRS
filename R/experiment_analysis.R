@@ -38,7 +38,8 @@ experiment_metrics <- function(experiment_id,
     return(NULL)
   }
   
-  # Get results statistics
+  # Get results statistics using dplyr if data is available
+  # Note: Still using SQL for database efficiency, but structure follows tidyverse
   results <- DBI::dbGetQuery(
     conn,
     "SELECT 
@@ -53,7 +54,8 @@ experiment_metrics <- function(experiment_id,
      FROM experiment_results
      WHERE experiment_id = ?",
     params = list(experiment_id)
-  )
+  ) |>
+    tibble::as_tibble()
   
   # Calculate with ground truth if available
   accuracy_metrics <- DBI::dbGetQuery(

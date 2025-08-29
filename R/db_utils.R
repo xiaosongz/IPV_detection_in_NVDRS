@@ -1,6 +1,6 @@
-#' Database connection utilities for SQLite
+#' Database connection utilities for SQLite and PostgreSQL
 #' 
-#' Simple, zero-configuration SQLite utilities following Unix philosophy.
+#' Simple database utilities supporting both SQLite (local) and PostgreSQL (scalable).
 #' One function, one purpose. No abstractions, no complexity.
 
 #' Get SQLite database connection
@@ -30,6 +30,53 @@ get_db_connection <- function(db_path = "llm_results.db", create = TRUE) {
   conn
 }
 
+#' Get PostgreSQL database connection
+#' 
+#' Connects to PostgreSQL using environment variables from .env file.
+#' Requires dotenv and RPostgres packages.
+#' 
+#' @param env_file Path to .env file (default: ".env")
+#' @return DBI connection object
+#' @export
+connect_postgres <- function(env_file = ".env") {
+  # Check required packages
+  if (!requireNamespace("DBI", quietly = TRUE)) {
+    stop("Package 'DBI' required. Install with: install.packages('DBI')")
+  }
+  if (!requireNamespace("RPostgres", quietly = TRUE)) {
+    stop("Package 'RPostgres' required. Install with: install.packages('RPostgres')")
+  }
+  
+  # Load environment variables if dotenv available
+  if (requireNamespace("dotenv", quietly = TRUE) && file.exists(env_file)) {
+    dotenv::load_dot_env(env_file)
+  }
+  
+  # Get connection parameters from environment
+  host <- Sys.getenv("POSTGRES_HOST", "localhost")
+  port <- as.integer(Sys.getenv("POSTGRES_PORT", "5432"))
+  dbname <- Sys.getenv("POSTGRES_DB")
+  user <- Sys.getenv("POSTGRES_USER")
+  password <- Sys.getenv("POSTGRES_PASSWORD")
+  
+  # Validate required parameters
+  if (dbname == "" || user == "" || password == "") {
+    stop("Missing PostgreSQL credentials. Set POSTGRES_DB, POSTGRES_USER, and POSTGRES_PASSWORD in .env file or environment.")
+  }
+  
+  # Create connection
+  conn <- DBI::dbConnect(
+    RPostgres::Postgres(),
+    host = host,
+    port = port,
+    dbname = dbname,
+    user = user,
+    password = password
+  )
+  
+  conn
+}
+
 #' Close database connection safely
 #' 
 #' @param conn DBI connection object
@@ -47,15 +94,31 @@ close_db_connection <- function(conn) {
 #' 
 #' Creates tables and indexes if they don't exist.
 #' Idempotent - safe to call multiple times.
+#' Works with both SQLite and PostgreSQL.
 #' 
 #' @param conn DBI connection object
 #' @return TRUE if successful
 #' @export
 ensure_schema <- function(conn) {
+  # Detect database type
+  db_type <- class(conn@ptr)[1]
+  is_postgres <- grepl("PostgreSQL|Postgres", db_type, ignore.case = TRUE)
+  
   # Single table design - Unix philosophy
-  schema_sql <- "
-  CREATE TABLE IF NOT EXISTS llm_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+  if (is_postgres) {
+    # PostgreSQL version with SERIAL instead of AUTOINCREMENT
+    schema_sql <- "
+    CREATE TABLE IF NOT EXISTS llm_results (
+      id SERIAL PRIMARY KEY,"
+  } else {
+    # SQLite version
+    schema_sql <- "
+    CREATE TABLE IF NOT EXISTS llm_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,"
+  }
+  
+  # Common schema for both databases
+  schema_sql <- paste0(schema_sql, "
     narrative_id TEXT,
     narrative_text TEXT,
     detected BOOLEAN NOT NULL,
@@ -69,16 +132,14 @@ ensure_schema <- function(conn) {
     error_message TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    -- Prevent exact duplicates
     UNIQUE(narrative_id, narrative_text, model)
   );
   
-  -- Indexes for performance
   CREATE INDEX IF NOT EXISTS idx_narrative_id ON llm_results(narrative_id);
   CREATE INDEX IF NOT EXISTS idx_detected ON llm_results(detected);
   CREATE INDEX IF NOT EXISTS idx_created_at ON llm_results(created_at);
   CREATE INDEX IF NOT EXISTS idx_model ON llm_results(model);
-  "
+  ")
   
   # Execute schema creation
   statements <- trimws(strsplit(schema_sql, ";")[[1]])

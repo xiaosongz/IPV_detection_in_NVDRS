@@ -6,7 +6,7 @@ USE Tidyverse style guide!
 
 ## The Only File That Matters
 
-`docs/ULTIMATE_CLEAN.R` - 30 lines that do everything. Read it. Use it. Done.
+`docs/ULTIMATE_CLEAN.R` - Minimal implementation that does everything. Read it. Use it. Done.
 
 ## What This Project Actually Does
 
@@ -21,7 +21,7 @@ That's it. One function, one purpose.
 1. **Never Add Complexity** - If you're adding classes, methods, or abstractions, STOP.
 2. **trimws() Everything** - Text always has trailing spaces. Deal with it.
 3. **Let Users Control** - They decide loops, parallelization, error handling. Not you.
-4. **100 Lines Maximum** - If the solution needs more, the problem is wrong.
+4. **Keep It Minimal** - Focus on simplicity and clarity over arbitrary line counts.
 5. **One Function Per File** - Never append functions to existing files. Create separate R files.
 
 ## Git Commit Best Practices (MANDATORY)
@@ -50,10 +50,11 @@ git merge --no-ff issue-4           # Merge with history
 ## File Structure (What Actually Matters)
 
 ```
-docs/ULTIMATE_CLEAN.R      # THE implementation (30 lines)
-docs/CLEAN_IMPLEMENTATION.R # If you REALLY need batching (100 lines)
+docs/ULTIMATE_CLEAN.R      # THE minimal implementation
+docs/CLEAN_IMPLEMENTATION.R # If you REALLY need batching
 data-raw/*.xlsx            # Test data
-Everything else            # Legacy garbage, ignore it
+R/*.R                      # Package functions
+tests/testthat/*.R         # Test files
 ```
 
 ## Common Tasks
@@ -79,7 +80,7 @@ This project has ONE data structure: a list with `detected` and `confidence`. Ev
 
 ## When Someone Asks for Features
 
-Default answer: "Write it yourself. The function is 30 lines. Fork it if you want complexity."
+Default answer: "Write it yourself. The function is minimal and simple. Fork it if you want complexity."
 
 ## The Linus Test
 

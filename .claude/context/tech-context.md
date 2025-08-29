@@ -19,8 +19,8 @@ author: Claude Code PM System
 # API and parsing
 install.packages(c("httr2", "jsonlite"))
 
-# Database storage (new)
-install.packages(c("DBI", "RSQLite"))
+# Database storage
+install.packages(c("DBI", "RSQLite", "RPostgres", "dotenv"))
 ```
 
 1. **httr2** - HTTP client for API calls
@@ -35,9 +35,17 @@ install.packages(c("DBI", "RSQLite"))
    - Purpose: Abstract database operations
    - Usage: Connect to and query databases
 
-4. **RSQLite** - SQLite driver (new)
+4. **RSQLite** - SQLite driver
    - Purpose: SQLite database backend
-   - Usage: Zero-configuration data storage
+   - Usage: Zero-configuration local storage
+
+5. **RPostgres** - PostgreSQL driver
+   - Purpose: PostgreSQL database backend  
+   - Usage: Scalable, multi-user database
+
+6. **dotenv** - Environment variable management
+   - Purpose: Load database credentials from .env
+   - Usage: Secure credential storage
 
 ### Testing Packages
 ```r

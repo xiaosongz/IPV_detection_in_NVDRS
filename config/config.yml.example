@@ -1,0 +1,38 @@
+# Example configuration file for IPV detection
+# Copy to config.yml and customize for your environment
+
+# API Configuration
+api:
+  url: "http://localhost:1234/v1/chat/completions"
+  model: "openai/gpt-oss-120b"
+  timeout: 30
+  max_retries: 3
+
+# Prompt Configuration
+prompts:
+  default: "Analyze for intimate partner violence: %s\nReturn JSON: {detected: bool, confidence: 0-1}"
+  law_enforcement: "From law enforcement perspective, detect IPV in: %s"
+  medical_examiner: "From medical examiner perspective, detect IPV in: %s"
+
+# Database Configuration  
+database:
+  type: "sqlite"  # or "postgres"
+  sqlite:
+    path: "llm_results.db"
+  postgres:
+    host: "localhost"
+    port: 5432
+    dbname: "ipv_detection"
+    user: "postgres"
+    password: "changeme"
+
+# Processing Options
+processing:
+  batch_size: 100
+  parallel_cores: 4
+  progress_bar: true
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/ipv_detection.log"
