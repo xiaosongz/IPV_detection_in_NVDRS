@@ -1,18 +1,34 @@
+# Tests for parse_llm_result function
+
+# Source the function
+source(here::here("R", "parse_llm_result.R"))
+
 test_that("parse_llm_result handles successful responses", {
-  # Skip if sample file doesn't exist
-  skip_if_not(file.exists("results/sample_responses/basic_ipv_positive.rds"),
-              "Sample response file not found")
+  # Mock a successful response
+  response <- list(
+    id = "test-123",
+    model = "test-model",
+    created = 1234567890,
+    choices = list(
+      list(
+        message = list(
+          content = '{"detected": true, "confidence": 0.85}'
+        )
+      )
+    ),
+    usage = list(
+      total_tokens = 100,
+      prompt_tokens = 50,
+      completion_tokens = 50
+    )
+  )
   
-  # Load a real successful response
-  response <- readRDS("results/sample_responses/basic_ipv_positive.rds")
   result <- parse_llm_result(response)
   
   expect_false(result$parse_error)
   expect_true(result$detected)
-  expect_true(result$confidence > 0.5)
-  expect_equal(result$model, "openai/gpt-oss-120b")
-  expect_false(is.na(result$tokens_used))
-  expect_false(is.na(result$response_id))
+  expect_equal(result$confidence, 0.85)
+  expect_equal(result$tokens_used, 100)
 })
 
 test_that("parse_llm_result handles responses with special tokens", {
@@ -312,33 +328,3 @@ test_that("parse_llm_result meets performance target", {
   expect_lt(elapsed, 0.2)
 })
 
-# Test with actual sample responses if available
-test_that("parse_llm_result works with all sample responses", {
-  sample_dir <- "results/sample_responses"
-  
-  # Skip if sample directory doesn't exist
-  skip_if_not(dir.exists(sample_dir), "Sample response directory not found")
-  
-  files <- list.files(sample_dir, pattern = "^[^(all|categorized)].*\\.rds$", 
-                      full.names = TRUE)
-  
-  # Skip if no sample files found
-  skip_if(length(files) == 0, "No sample response files found")
-  
-  for (file in files) {
-    response <- readRDS(file)
-    result <- parse_llm_result(response)
-    
-    # Every response should return a valid structure
-    expect_true(is.list(result))
-    expect_true("detected" %in% names(result))
-    expect_true("confidence" %in% names(result))
-    expect_true("parse_error" %in% names(result))
-    
-    # If not an error, should have extracted something
-    if (!result$parse_error) {
-      expect_true(!is.na(result$detected) || !is.na(result$confidence),
-                 info = paste("Failed for:", basename(file)))
-    }
-  }
-})

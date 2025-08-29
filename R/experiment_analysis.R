@@ -295,7 +295,7 @@ ab_test_prompts <- function(prompt_v1_id, prompt_v2_id,
   
   if (!is.null(model)) {
     query <- paste(query, "AND e1.model = ? AND e2.model = ?")
-    params <- c(params, model, model)
+    params <- c(params, list(model, model))
   }
   
   paired_results <- DBI::dbGetQuery(conn, query, params = params)

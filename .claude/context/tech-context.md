@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-29T16:33:40Z
-version: 1.2
+last_updated: 2025-08-29T18:53:57Z
+version: 1.3
 author: Claude Code PM System
 ---
 
@@ -52,6 +52,18 @@ install.packages(c("DBI", "RSQLite", "RPostgres", "digest"))
 ```r
 # For comprehensive testing
 install.packages("testthat")
+```
+
+### Development Packages (Suggested)
+```r
+# Modern R development
+install.packages(c("dplyr", "purrr", "tibble", "rlang"))
+
+# Configuration management  
+install.packages(c("dotenv", "yaml"))
+
+# Test utilities
+install.packages(c("here", "mockery"))
 ```
 
 ### Optional Packages (User Choice)
@@ -165,3 +177,26 @@ config <- list(
 - Local processing option with LM Studio
 - No cloud dependencies required
 - User controls all data flow
+
+## Database Configuration
+
+### PostgreSQL Production Setup
+```r
+# Environment variables in .env file
+POSTGRES_HOST=your-postgres-host
+POSTGRES_PORT=5432
+POSTGRES_DB=ipv_detection
+POSTGRES_USER=your-username  
+POSTGRES_PASSWORD=your-password
+```
+
+### SQLite Development Setup
+```r
+# Default configuration
+db_path <- "llm_results.db"  # Automatic creation
+```
+
+## Update History
+- 2025-08-29: Added database dependency packages (DBI, RSQLite, RPostgres, digest)
+- 2025-08-29: Added development packages (dplyr, purrr, tibble, rlang, dotenv, yaml)
+- 2025-08-29: Added PostgreSQL configuration section

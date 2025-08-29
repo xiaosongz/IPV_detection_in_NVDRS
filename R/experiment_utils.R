@@ -65,7 +65,13 @@ register_prompt <- function(system_prompt,
       conn,
       "INSERT INTO prompt_versions (system_prompt, user_prompt_template, prompt_hash, version_tag, notes) 
        VALUES (?, ?, ?, ?, ?)",
-      params = list(system_prompt, user_prompt_template, prompt_hash, version_tag, notes)
+      params = list(
+        system_prompt, 
+        user_prompt_template, 
+        prompt_hash, 
+        version_tag %||% NA_character_, 
+        notes %||% NA_character_
+      )
     )
     
     # Get the inserted ID
@@ -243,7 +249,13 @@ start_experiment <- function(name,
       conn,
       "INSERT INTO experiments (name, prompt_version_id, model, dataset_name, notes, status) 
        VALUES (?, ?, ?, ?, ?, 'running')",
-      params = list(name, prompt_version_id, model, dataset_name, notes)
+      params = list(
+        name, 
+        prompt_version_id, 
+        model, 
+        dataset_name %||% NA_character_, 
+        notes %||% NA_character_
+      )
     )
     
     exp_id <- DBI::dbGetQuery(conn, "SELECT last_insert_rowid() as id")$id
@@ -373,7 +385,7 @@ store_experiment_result <- function(experiment_id,
         response_time_ms, prompt_tokens, completion_tokens, total_tokens,
         raw_response, error_message)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      params = insert_data
+      params = unname(insert_data)
     )
     TRUE
     
