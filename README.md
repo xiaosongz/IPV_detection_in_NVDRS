@@ -102,31 +102,95 @@ list(
 )
 ```
 
-## Optional: Storage & Experiments
+## Optional: Storage & Experiment Tracking
 
-If you want to store results or track prompt experiments:
+The minimal `detect_ipv` function works standalone. But if you want to store results, track experiments, or analyze performance, there are optional storage utilities.
+
+### Quick Storage (SQLite)
 
 ```r
-# Store results (optional)
+# Process and store results locally
 source("R/0_setup.R")
-parsed <- parse_llm_result(response)
-conn <- connect_db()
-store_llm_result(parsed, conn)
 
-# Track experiments (for R&D)
-prompt_id <- register_prompt(conn, system_prompt, user_prompt)
-results <- ab_test_prompts(conn, prompt_v1, prompt_v2, test_data)
+response <- call_llm("narrative text", "system prompt")
+parsed <- parse_llm_result(response, narrative_id = "case_123")
+
+# Store in local SQLite database (auto-creates schema)
+conn <- get_db_connection("results.db")
+store_llm_result(parsed, conn)
+close_db_connection(conn)
+
+# Batch processing with storage
+results <- store_llm_results_batch(parsed_results, db_path = "results.db")
 ```
 
-See `docs/RESULT_STORAGE_GUIDE.md` for details. Or don't. The minimal function works fine without it.
+### Production Storage (PostgreSQL)
 
-## The Real Implementation Files
+```r
+# Scale to PostgreSQL for production workloads
+# Create .env file with: POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 
+conn <- connect_postgres()
+store_llm_result(parsed, conn)
+
+# Batch processing: ~250-500 records/second over network
+batch_result <- store_llm_results_batch(parsed_results, conn = conn, chunk_size = 5000)
+close_db_connection(conn)
+```
+
+### Experiment Tracking (R&D)
+
+```r
+# Track prompt experiments and compare performance
+conn <- get_db_connection("experiments.db")
+ensure_experiment_schema(conn)
+
+# Register prompt versions
+v1_id <- register_prompt(conn, "You are an IPV detector", "Analyze: {{narrative}}")
+v2_id <- register_prompt(conn, "You are a forensic analyst", "Detect IPV in: {{narrative}}")
+
+# A/B test different prompts
+results <- ab_test_prompts(conn, v1_id, v2_id, test_narratives)
+print(results$comparison)  # Shows performance metrics
+
+close_db_connection(conn)
+```
+
+### Feature Comparison
+
+| Feature | SQLite (Local) | PostgreSQL (Production) |
+|---------|----------------|-------------------------|
+| Setup | Zero config | Environment variables |
+| Performance | 50-200/sec | 250-500/sec (network) |
+| Concurrent users | Single user | Multi-user |
+| Storage limit | Disk space | Server capacity |
+| Best for | Development, analysis | Production, teams |
+
+### Documentation
+
+- **Storage Guide**: `docs/RESULT_STORAGE_GUIDE.md` - Comprehensive storage examples
+- **SQLite Setup**: `docs/SQLITE_SETUP.md` - Local development setup  
+- **PostgreSQL Setup**: `docs/POSTGRESQL_SETUP.md` - Production deployment
+- **Troubleshooting**: `docs/TROUBLESHOOTING.md` - Common issues and solutions
+- **Experiments**: `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization
+
+Or don't use any of this. The minimal `detect_ipv` function works perfectly standalone.
+
+## Key Files
+
+### Core Implementation
 - `docs/ULTIMATE_CLEAN.R` - The minimal version. Use this.
 - `docs/CLEAN_IMPLEMENTATION.R` - Extended version with batching if you need it.
-- `docs/RESULT_STORAGE_GUIDE.md` - Storage and experiment tracking (optional).
-- `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization (optional).
-- Everything else - Legacy complexity. Ignore it.
+
+### Documentation
+- `docs/RESULT_STORAGE_GUIDE.md` - Storage and experiment tracking (optional)
+- `docs/SQLITE_SETUP.md` - Local development with SQLite (zero config)
+- `docs/POSTGRESQL_SETUP.md` - Production deployment with PostgreSQL  
+- `docs/TROUBLESHOOTING.md` - Common issues and solutions
+- `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization (optional)
+
+### Everything Else
+Legacy complexity. Ignore it.
 
 ## Why This Approach?
 

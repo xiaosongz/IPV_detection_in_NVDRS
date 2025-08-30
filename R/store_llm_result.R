@@ -10,6 +10,31 @@
 #' @param auto_close Whether to close connection after operation (default: TRUE if conn is NULL)
 #' @return List with success status and optional error message
 #' @export
+#' @examples
+#' \dontrun{
+#' # Basic usage with parsed result
+#' response <- call_llm("Analyze this narrative...", "System prompt")
+#' parsed <- parse_llm_result(response, narrative_id = "case_123")
+#' 
+#' # Store the result
+#' result <- store_llm_result(parsed)
+#' if (result$success) {
+#'   message("Result stored successfully")
+#' } else {
+#'   warning("Storage failed: ", result$error)
+#' }
+#' 
+#' # Using existing connection for better performance
+#' conn <- get_db_connection()
+#' ensure_schema(conn)
+#' 
+#' result <- store_llm_result(parsed, conn = conn, auto_close = FALSE)
+#' # ... store more results ...
+#' close_db_connection(conn)
+#' 
+#' # Custom database file
+#' store_llm_result(parsed, db_path = "experiment_results.db")
+#' }
 store_llm_result <- function(parsed_result, 
                             conn = NULL, 
                             db_path = "llm_results.db",
@@ -137,6 +162,37 @@ store_llm_result <- function(parsed_result,
 #' @param conn Existing connection (optional, improves performance)
 #' @return List with summary statistics
 #' @export
+#' @examples
+#' \dontrun{
+#' # Process multiple narratives and batch store
+#' narratives <- c("Text 1", "Text 2", "Text 3")
+#' parsed_results <- list()
+#' 
+#' for (i in seq_along(narratives)) {
+#'   response <- call_llm(narratives[i], "System prompt")
+#'   parsed_results[[i]] <- parse_llm_result(response, 
+#'                                           narrative_id = paste0("case_", i))
+#' }
+#' 
+#' # Batch store all results
+#' batch_result <- store_llm_results_batch(parsed_results)
+#' cat("Inserted:", batch_result$inserted, "\n")
+#' cat("Duplicates:", batch_result$duplicates, "\n") 
+#' cat("Success rate:", round(batch_result$success_rate * 100, 1), "%\n")
+#' 
+#' # Custom chunk size for large batches
+#' large_batch_result <- store_llm_results_batch(parsed_results, 
+#'                                              chunk_size = 500)
+#' 
+#' # Using existing connection for multiple batches
+#' conn <- get_db_connection()
+#' ensure_schema(conn)
+#' 
+#' batch1 <- store_llm_results_batch(parsed_results[1:10], conn = conn)
+#' batch2 <- store_llm_results_batch(parsed_results[11:20], conn = conn)
+#' 
+#' close_db_connection(conn)
+#' }
 store_llm_results_batch <- function(parsed_results, 
                                    db_path = "llm_results.db",
                                    chunk_size = NULL,
