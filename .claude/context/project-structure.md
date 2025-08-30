@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-29T19:33:02Z
-version: 1.5
+last_updated: 2025-08-29T22:52:58Z
+version: 1.7
 author: Claude Code PM System
 ---
 
@@ -23,9 +23,18 @@ IPV_detection_in_NVDRS/
 │   ├── LLM_RESPONSE_ANALYSIS.md # Analysis of LLM response structures
 │   ├── PROMPT_STRUCTURE_ANALYSIS.md # Prompt engineering documentation
 │   ├── EXPERIMENT_MODE_GUIDE.md # Complete guide for R&D experiment tracking
+│   ├── PERFORMANCE_CHARACTERISTICS.md # System performance metrics
+│   ├── PRODUCTION_VALIDATION.md # Production readiness certification
+│   ├── POSTGRESQL_SETUP.md # PostgreSQL configuration guide
+│   ├── SQLITE_SETUP.md  # SQLite setup and optimization guide
+│   ├── TROUBLESHOOTING.md # Comprehensive troubleshooting guide
 │   └── *.md             # Documentation files
 ├── examples/             # Usage examples
-│   └── parser_example.R # Example of parsing LLM responses
+│   ├── parser_example.R # Example of parsing LLM responses
+│   ├── database_setup_example.R # Database connection and setup
+│   ├── batch_processing_example.R # Efficient batch processing
+│   ├── experiment_tracking_example.R # Research and experimentation
+│   └── integration_example.R # Complete end-to-end workflow
 ├── config/               # Configuration files (legacy)
 ├── logs/                 # API call logs and debugging
 ├── results/              # Output directory for analysis results
@@ -44,7 +53,8 @@ IPV_detection_in_NVDRS/
 │   │   ├── test_database_backends.R # SQLite/PostgreSQL comparison
 │   │   ├── test_concurrent_access.R # Concurrent access testing
 │   │   ├── test_production_scenarios.R # Production readiness
-│   │   └── run_integration_tests.R  # Test runner with reporting
+│   │   ├── run_integration_tests.R  # Test runner with reporting
+│   │   └── README.md     # Integration test documentation
 │   ├── performance/      # Performance benchmarks
 │   │   ├── benchmark_postgres.R     # PostgreSQL performance testing
 │   │   ├── integration_benchmarks.R # Component benchmarking
