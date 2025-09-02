@@ -12,7 +12,7 @@
 #' @param metadata Optional list. Additional metadata to include in the parsed
 #'   result (e.g., batch_id, user_id, processing_date).
 #'
-#' @return A list with standardized structure containing:
+#' @return A single-row tibble with standardized structure containing:
 #'   \describe{
 #'     \item{detected}{Logical. TRUE if IPV detected, FALSE if not, NA if parsing failed}
 #'     \item{confidence}{Numeric. Confidence score 0.0-1.0, NA if not available}
@@ -38,14 +38,14 @@
 #' # Parse a successful response
 #' response <- call_llm("Analyze this text", "System prompt")
 #' parsed <- parse_llm_result(response)
-#' 
+#'
 #' # With narrative ID and metadata
 #' parsed <- parse_llm_result(
-#'   response, 
+#'   response,
 #'   narrative_id = "case_123",
 #'   metadata = list(batch = "2025-01", source = "NVDRS")
 #' )
-#' 
+#'
 #' # Check for errors
 #' if (parsed$parse_error) {
 #'   warning(paste("Parse failed:", parsed$error_message))
@@ -55,11 +55,54 @@
 #' @seealso \code{\link{call_llm}} for making API calls
 #'
 parse_llm_result <- function(llm_response, narrative_id = NULL, metadata = NULL) {
+  # Define NULL-safe extraction operator
+  `%||%` <- function(x, y) if (is.null(x)) y else x
+
+  # Initialize result structure
+  result <- initialize_parse_result(narrative_id, metadata)
+
+  # Validate input
+  validation_error <- validate_llm_response(llm_response)
+  if (!is.null(validation_error)) {
+    result <- set_parse_error(result, validation_error)
+    return(convert_to_tibble_row(result))
+  }
+
+  # Extract all metadata components
+  result <- result |>
+    extract_response_metadata(llm_response) |>
+    extract_usage_metadata(llm_response) |>
+    extract_test_metadata(llm_response)
+
+  # Extract reasoning if present
+  reasoning <- extract_reasoning(llm_response)
+  if (!is.null(reasoning)) {
+    result$reasoning <- reasoning
+  }
+
+  # Extract and parse content
+  content <- extract_response_content(llm_response)
+  if (is.null(content)) {
+    result <- set_parse_error(result, "No content in response")
+    return(convert_to_tibble_row(result))
+  }
+
+  result$raw_response <- content
+
+  # Parse IPV detection results
+  result <- parse_ipv_content(result, content)
   
-  # Initialize result structure with defaults
-  result <- list(
+  # Convert to single-row tibble
+  convert_to_tibble_row(result)
+}
+
+# Helper: Initialize result structure
+initialize_parse_result <- function(narrative_id, metadata) {
+  list(
     detected = NA,
     confidence = NA_real_,
+    indicators = list(NULL),  # List column for array of indicators
+    rationale = NA_character_,
     model = NA_character_,
     created_at = NA_character_,
     response_id = NA_character_,
@@ -68,184 +111,268 @@ parse_llm_result <- function(llm_response, narrative_id = NULL, metadata = NULL)
     completion_tokens = NA_integer_,
     response_time_ms = NA_real_,
     narrative_id = narrative_id,
-    narrative_length = NA_integer_,
     parse_error = FALSE,
     error_message = NA_character_,
     raw_response = NA_character_,
-    metadata = metadata
+    reasoning = NA_character_  # Add reasoning field
   )
-  
-  # Validate input
-  if (is.null(llm_response)) {
-    result$parse_error <- TRUE
-    result$error_message <- "Response is NULL"
-    return(result)
+}
+
+# Helper: Validate response structure
+validate_llm_response <- function(response) {
+  if (is.null(response)) {
+    return("Response is NULL")
   }
-  
-  if (!is.list(llm_response)) {
-    result$parse_error <- TRUE
-    result$error_message <- "Response is not a list"
-    return(result)
+
+  if (!is.list(response)) {
+    return("Response is not a list")
   }
-  
-  # Check for API error response
-  if (!is.null(llm_response$error)) {
-    result$parse_error <- TRUE
-    result$error_message <- if (is.character(llm_response$error_message)) {
-      llm_response$error_message
-    } else {
-      "API error occurred"
-    }
-    return(result)
+
+  if (!is.null(response$error)) {
+    return(response$error_message %||% "API error occurred")
   }
-  
-  # Extract basic metadata
-  if (!is.null(llm_response$model)) {
-    result$model <- as.character(llm_response$model)
+
+  NULL
+}
+
+# Helper: Set parse error
+set_parse_error <- function(result, message) {
+  result$parse_error <- TRUE
+  result$error_message <- message
+  result
+}
+
+# Helper: Safe field extraction with type conversion
+safe_extract <- function(obj, path, converter = as.character, default = NA) {
+  value <- obj
+  for (key in path) {
+    value <- value[[key]]
+    if (is.null(value)) return(default)
   }
-  
-  if (!is.null(llm_response$id)) {
-    result$response_id <- as.character(llm_response$id)
-  }
-  
-  if (!is.null(llm_response$created)) {
-    # Convert Unix timestamp to ISO format
-    if (is.numeric(llm_response$created)) {
-      result$created_at <- format(
-        as.POSIXct(llm_response$created, origin = "1970-01-01", tz = "UTC"),
+  tryCatch(converter(value), error = function(e) default)
+}
+
+# Helper: Extract response metadata
+extract_response_metadata <- function(result, response) {
+  result$model <- safe_extract(response, "model")
+  result$response_id <- safe_extract(response, "id")
+
+  # Handle created timestamp
+  created <- response$created
+  if (!is.null(created)) {
+    result$created_at <- if (is.numeric(created)) {
+      format(
+        as.POSIXct(created, origin = "1970-01-01", tz = "UTC"),
         "%Y-%m-%dT%H:%M:%SZ"
       )
     } else {
-      result$created_at <- as.character(llm_response$created)
+      as.character(created)
     }
   }
-  
-  # Extract token usage
-  if (!is.null(llm_response$usage)) {
-    if (!is.null(llm_response$usage$total_tokens)) {
-      result$tokens_used <- as.integer(llm_response$usage$total_tokens)
-    }
-    if (!is.null(llm_response$usage$prompt_tokens)) {
-      result$prompt_tokens <- as.integer(llm_response$usage$prompt_tokens)
-    }
-    if (!is.null(llm_response$usage$completion_tokens)) {
-      result$completion_tokens <- as.integer(llm_response$usage$completion_tokens)
+
+  result
+}
+
+# Helper: Extract usage metadata
+extract_usage_metadata <- function(result, response) {
+  usage <- response$usage
+  if (!is.null(usage)) {
+    result$tokens_used <- safe_extract(
+      usage, "total_tokens", as.integer, NA_integer_
+    )
+    result$prompt_tokens <- safe_extract(
+      usage, "prompt_tokens", as.integer, NA_integer_
+    )
+    result$completion_tokens <- safe_extract(
+      usage, "completion_tokens", as.integer, NA_integer_
+    )
+  }
+  result
+}
+
+# Helper: Extract test metadata
+extract_test_metadata <- function(result, response) {
+  test_meta <- response$test_metadata
+  if (!is.null(test_meta)) {
+    elapsed <- test_meta$elapsed_seconds
+    if (!is.null(elapsed)) {
+      result$response_time_ms <- as.numeric(elapsed) * 1000
     }
   }
-  
-  # Extract response time if available in test metadata
-  if (!is.null(llm_response$test_metadata)) {
-    if (!is.null(llm_response$test_metadata$elapsed_seconds)) {
-      result$response_time_ms <- llm_response$test_metadata$elapsed_seconds * 1000
-    }
-    if (!is.null(llm_response$test_metadata$prompt_length)) {
-      result$narrative_length <- as.integer(llm_response$test_metadata$prompt_length)
-    }
+  result
+}
+
+# Helper: Extract response content
+extract_response_content <- function(response) {
+  # Navigate to message content
+  choices <- response$choices
+  if (is.null(choices) || length(choices) == 0) {
+    return(NULL)
   }
-  
-  # Extract and parse the actual response content
-  content <- NULL
-  
-  # Navigate to the message content
-  if (!is.null(llm_response$choices) && length(llm_response$choices) > 0) {
-    first_choice <- llm_response$choices[[1]]
-    if (!is.null(first_choice$message) && !is.null(first_choice$message$content)) {
-      content <- first_choice$message$content
-      result$raw_response <- content
-    }
+
+  first_choice <- choices[[1]]
+  message <- first_choice$message
+  if (is.null(message)) {
+    return(NULL)
   }
-  
-  # If no content found, mark as error
+
+  content <- message$content
   if (is.null(content) || content == "") {
-    result$parse_error <- TRUE
-    result$error_message <- "No content in response"
-    return(result)
+    return(NULL)
+  }
+
+  content
+}
+
+# Helper: Extract reasoning from response
+extract_reasoning <- function(response) {
+  choices <- response$choices
+  if (is.null(choices) || length(choices) == 0) {
+    return(NULL)
   }
   
-  # Clean content from special tokens used by some models
-  # Remove tokens like <|channel|>, <|constrain|>, <|message|>
-  cleaned_content <- gsub("<\\|[^|]+\\|>", "", content)
-  cleaned_content <- trimws(cleaned_content)
-  
-  # Try to parse as JSON
-  parsed_json <- NULL
-  
-  # First attempt: direct JSON parsing
-  if (!result$parse_error) {
-    parsed_json <- tryCatch({
-      jsonlite::fromJSON(cleaned_content, simplifyVector = FALSE)
-    }, error = function(e) {
-      # Try to extract JSON from mixed content
-      # Look for JSON-like structure {...}
-      json_match <- regmatches(
-        cleaned_content,
-        regexpr("\\{[^{}]*\\}", cleaned_content, perl = TRUE)
-      )
-      
-      if (length(json_match) > 0) {
-        tryCatch({
-          jsonlite::fromJSON(json_match[1], simplifyVector = FALSE)
-        }, error = function(e2) {
-          NULL
-        })
-      } else {
-        NULL
-      }
-    })
+  first_choice <- choices[[1]]
+  message <- first_choice$message
+  if (is.null(message)) {
+    return(NULL)
   }
   
-  # Extract IPV detection results if JSON was parsed
+  reasoning <- message$reasoning
+  if (is.null(reasoning) || reasoning == "") {
+    return(NULL)
+  }
+  
+  trimws(reasoning)
+}
+
+# Helper: Clean content from special tokens
+clean_llm_content <- function(content) {
+  content |>
+    stringr::str_remove_all("<\\|[^|]+\\|>") |>
+    trimws()
+}
+
+# Helper: Extract JSON from content
+extract_json_from_content <- function(content) {
+  # First try: direct parsing
+  json_result <- tryCatch(
+    jsonlite::fromJSON(content, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+
+  if (!is.null(json_result)) {
+    return(json_result)
+  }
+
+  # Second try: extract JSON objects from mixed content
+  json_patterns <- stringr::str_extract_all(
+    content,
+    "\\{(?:[^{}]|\\{[^{}]*\\})*\\}"
+  )[[1]]
+
+  for (pattern in json_patterns) {
+    json_result <- tryCatch(
+      jsonlite::fromJSON(pattern, simplifyVector = FALSE),
+      error = function(e) NULL
+    )
+    if (!is.null(json_result)) {
+      return(json_result)
+    }
+  }
+
+  NULL
+}
+
+# Helper: Extract IPV from text patterns (fallback)
+extract_ipv_from_text <- function(content) {
+  content_lower <- tolower(content)
+
+  list(
+    detected = dplyr::case_when(
+      stringr::str_detect(content_lower, "\"detected\"\\s*:\\s*true") ~ TRUE,
+      stringr::str_detect(content_lower, "\"detected\"\\s*:\\s*false") ~ FALSE,
+      TRUE ~ NA
+    ),
+    confidence = extract_confidence_from_text(content_lower)
+  )
+}
+
+# Helper: Extract confidence from text
+extract_confidence_from_text <- function(content_lower) {
+  conf_match <- stringr::str_extract(
+    content_lower,
+    "\"confidence\"\\s*:\\s*[0-9.]+"
+  )
+
+  if (is.na(conf_match)) {
+    return(NA_real_)
+  }
+
+  conf_value <- as.numeric(
+    stringr::str_extract(conf_match, "[0-9.]+")
+  )
+
+  if (!is.na(conf_value) && conf_value >= 0 && conf_value <= 1) {
+    return(conf_value)
+  }
+
+  NA_real_
+}
+
+# Helper: Parse IPV content
+parse_ipv_content <- function(result, content) {
+  cleaned_content <- clean_llm_content(content)
+  parsed_json <- extract_json_from_content(cleaned_content)
+
   if (!is.null(parsed_json)) {
-    # Check for detected field
-    if (!is.null(parsed_json$detected)) {
-      result$detected <- as.logical(parsed_json$detected)
-    }
-    
-    # Check for confidence field
-    if (!is.null(parsed_json$confidence)) {
-      conf_value <- as.numeric(parsed_json$confidence)
-      if (!is.na(conf_value) && conf_value >= 0 && conf_value <= 1) {
-        result$confidence <- conf_value
-      }
-    }
-    
-    # Store any additional fields in metadata if not already provided
-    extra_fields <- setdiff(names(parsed_json), c("detected", "confidence"))
-    if (length(extra_fields) > 0) {
-      if (is.null(result$metadata)) {
-        result$metadata <- list()
-      }
-      for (field in extra_fields) {
-        result$metadata[[paste0("llm_", field)]] <- parsed_json[[field]]
-      }
-    }
+    # Successfully parsed JSON
+    result <- extract_ipv_from_json(result, parsed_json)
   } else {
-    # JSON parsing failed
+    # Fallback to text pattern extraction
     result$parse_error <- TRUE
     result$error_message <- "Failed to parse JSON from response content"
-    
-    # Try to extract detection result from text patterns as fallback
-    content_lower <- tolower(cleaned_content)
-    
-    # Check for clear positive/negative indicators
-    if (grepl("\"detected\"\\s*:\\s*true", content_lower)) {
-      result$detected <- TRUE
-    } else if (grepl("\"detected\"\\s*:\\s*false", content_lower)) {
-      result$detected <- FALSE
-    }
-    
-    # Try to extract confidence
-    conf_match <- regmatches(
-      content_lower,
-      regexpr("\"confidence\"\\s*:\\s*[0-9.]+", content_lower)
-    )
-    if (length(conf_match) > 0) {
-      conf_value <- as.numeric(gsub("[^0-9.]", "", conf_match[1]))
-      if (!is.na(conf_value) && conf_value >= 0 && conf_value <= 1) {
-        result$confidence <- conf_value
-      }
+
+    text_extraction <- extract_ipv_from_text(cleaned_content)
+    result$detected <- text_extraction$detected
+    result$confidence <- text_extraction$confidence
+  }
+
+  result
+}
+
+# Helper: Extract IPV data from parsed JSON
+extract_ipv_from_json <- function(result, parsed_json) {
+  # Extract core fields
+  if (!is.null(parsed_json$detected)) {
+    result$detected <- as.logical(parsed_json$detected)
+  }
+
+  if (!is.null(parsed_json$confidence)) {
+    conf_value <- as.numeric(parsed_json$confidence)
+    if (!is.na(conf_value) && conf_value >= 0 && conf_value <= 1) {
+      result$confidence <- conf_value
     }
   }
-  
-  return(result)
+
+  # Extract indicators array
+  if (!is.null(parsed_json$indicators)) {
+    result$indicators <- list(parsed_json$indicators)
+  }
+
+  # Extract rationale
+  if (!is.null(parsed_json$rationale)) {
+    result$rationale <- as.character(parsed_json$rationale)
+  }
+
+  result
+}
+
+# Helper: Convert result to tibble row
+convert_to_tibble_row <- function(result) {
+  # Ensure list columns are properly wrapped
+  if (!is.null(result$indicators) && !is.list(result$indicators)) {
+    result$indicators <- list(result$indicators)
+  }
+
+  tibble::as_tibble_row(result)
 }

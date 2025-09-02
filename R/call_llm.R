@@ -72,7 +72,7 @@ call_llm <- function(user_prompt,
   # Make API call and return response
   httr2::request(api_url) |>
     httr2::req_body_json(request_body) |>
-    httr2::req_timeout(30) |>
+    httr2::req_timeout(60) |>
     httr2::req_perform() |>
     httr2::resp_body_json()
 }

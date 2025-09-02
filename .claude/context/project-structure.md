@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-29T22:52:58Z
-version: 1.7
+last_updated: 2025-08-31T18:58:43Z
+version: 1.8
 author: Claude Code PM System
 ---
 
@@ -35,7 +35,9 @@ IPV_detection_in_NVDRS/
 │   ├── batch_processing_example.R # Efficient batch processing
 │   ├── experiment_tracking_example.R # Research and experimentation
 │   └── integration_example.R # Complete end-to-end workflow
-├── config/               # Configuration files (legacy)
+├── config/               # Configuration templates
+│   ├── .env.example      # Environment variables template
+│   └── config.yml.example # Configuration YAML template
 ├── logs/                 # API call logs and debugging
 ├── results/              # Output directory for analysis results
 ├── tests/                # Test files and validation scripts
@@ -72,11 +74,14 @@ IPV_detection_in_NVDRS/
 │   ├── store_llm_result.R # Store parsed results in database
 │   ├── experiment_utils.R # Prompt versioning and experiment management
 │   ├── experiment_analysis.R # Statistical comparison and A/B testing
+│   ├── utils.R          # Utility functions (trimws_safe, null_or_empty operator)
 │   └── IPVdetection-package.R # Package metadata
 ├── inst/                 # Package installed files
 │   └── sql/             # SQL schema and migrations
 │       ├── schema.sql   # Basic database schema (SQLite/PostgreSQL compatible)
 │       └── experiment_schema.sql # R&D experiment tracking schema
+├── scripts/              # Migration and utility scripts
+│   └── migrate_sqlite_to_postgres.R # SQLite to PostgreSQL migration tool
 ├── README.md             # Project documentation
 ├── CLAUDE.md            # Claude Code specific instructions
 ├── CLAUDE.local.md      # Local Claude configuration
