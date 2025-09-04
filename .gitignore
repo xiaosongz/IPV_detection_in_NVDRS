@@ -69,6 +69,10 @@ output/*
 !output/tables/.gitkeep
 !output/reports/.gitkeep
 
+# Benchmark results
+benchmark_results/*
+!benchmark_results/.gitkeep
+
 # Log files
 logs/*
 !logs/.gitkeep

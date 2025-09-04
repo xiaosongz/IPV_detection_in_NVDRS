@@ -34,7 +34,7 @@ config <- list(
   batch_size = 50,
   enable_experiments = TRUE,
   enable_performance_monitoring = TRUE,
-  output_dir = "integration_output"
+  output_dir = "benchmark_results"
 )
 
 cat(sprintf("Configuration:\n"))

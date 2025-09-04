@@ -1,7 +1,7 @@
 ---
 created: 2025-08-27T21:35:45Z
-last_updated: 2025-08-31T18:58:43Z
-version: 1.8
+last_updated: 2025-09-02T19:44:32Z
+version: 1.9
 author: Claude Code PM System
 ---
 
@@ -15,6 +15,8 @@ IPV_detection_in_NVDRS/
 │   ├── context/          # Project context documentation
 │   ├── scripts/          # PM and automation scripts
 │   └── ...              # Other Claude configuration
+├── benchmark_results/    # Benchmark output files (NEW)
+│   └── benchmark_results_*.{csv,json}  # Timestamped results
 ├── data-raw/             # Raw data files
 │   └── suicide_IPV_manuallyflagged.xlsx  # Test dataset with manual flags
 ├── docs/                 # Core implementation files
@@ -34,7 +36,7 @@ IPV_detection_in_NVDRS/
 │   ├── database_setup_example.R # Database connection and setup
 │   ├── batch_processing_example.R # Efficient batch processing
 │   ├── experiment_tracking_example.R # Research and experimentation
-│   └── integration_example.R # Complete end-to-end workflow
+│   └── integration_example.R # Complete end-to-end workflow (updated for benchmark_results/)
 ├── config/               # Configuration templates
 │   ├── .env.example      # Environment variables template
 │   └── config.yml.example # Configuration YAML template
@@ -69,6 +71,7 @@ IPV_detection_in_NVDRS/
 │   ├── 0_setup.R         # Direct execution setup script
 │   ├── build_prompt.R    # Message formatting function
 │   ├── call_llm.R       # LLM API interface function
+│   ├── call_llm_batch.R  # EXPERIMENTAL batch processing functions (untested)
 │   ├── parse_llm_result.R # Parse LLM responses to structured data
 │   ├── db_utils.R       # Database connection utilities (SQLite & PostgreSQL)
 │   ├── store_llm_result.R # Store parsed results in database
@@ -80,7 +83,9 @@ IPV_detection_in_NVDRS/
 │   └── sql/             # SQL schema and migrations
 │       ├── schema.sql   # Basic database schema (SQLite/PostgreSQL compatible)
 │       └── experiment_schema.sql # R&D experiment tracking schema
-├── scripts/              # Migration and utility scripts
+├── scripts/              # Benchmark and utility scripts
+│   ├── run_benchmark.R  # Standard benchmark script (updated for benchmark_results/)
+│   ├── run_benchmark_optimized.R # EXPERIMENTAL optimized benchmark (untested)
 │   └── migrate_sqlite_to_postgres.R # SQLite to PostgreSQL migration tool
 ├── README.md             # Project documentation
 ├── CLAUDE.md            # Claude Code specific instructions

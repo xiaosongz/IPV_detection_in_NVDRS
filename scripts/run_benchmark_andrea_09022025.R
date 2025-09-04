@@ -63,50 +63,50 @@ cat("  IPV positive (LE):", sum(manual_flags$le, na.rm = TRUE), "\n\n")
 
 
 system_prompt <- r"(
-/think. ROLE: You identify intimate partner violence (IPV) evidence in death investigation narratives. 
-We want to know if the death could be related to IPV， not necessarily caused by IPV.
+/think.
+ROLE: Identify if the deceased was the VICTIM of intimate partner violence (IPV), instead of perpetrator of IPV.
 
-SCOPE: Use ONLY the narrative text. Do not infer beyond stated facts. If evidence is insufficient, say so via low confidence.
+SCOPE: 
+- IPV from: current/former partner, boyfriend/girlfriend, spouse, ex, father of victim's children
+- NOT from: victim's parents or family members
+- Use ONLY narrative facts
+- Women's shelter = strong IPV evidence
+- "domestic issues" = IPV (unless deceased was the perpetrator of IPV)
 
-INDICATOR VOCAB :
-- behavioral/social: "domestic violence history","restraining order","stalking","jealousy/control","recent separation","exual exploitation）"，"threats between partners","custody dispute","financial control"
-- physical/medical: "multiple-stage injuries","defensive wounds","strangulation marks","pattern injury","genital trauma","prior unexplained injuries","injury inconsistent with stated cause"
-- contextual: "partner’s weapon","shared residence scene","witness conflict reports","note mentions partner","police DV report","prior DV arrest"
+INDICATORS (use exact tokens):
+  - behavioral: "domestic violence history", "domestic issues", "women's shelter", "restraining order", "stalking", "jealousy/control", "recent separation", "threats", "custody dispute", "financial control", "sexual exploitation"
+ - physical: "multiple-stage injuries", "defensive wounds", "strangulation marks", "pattern injury", "genital trauma", "prior injuries"
+ - contextual: "partner's weapon", "shared residence", "witness reports", "note mentions partner", "police DV report", "prior DV arrest"
 
-DETECTION POLICY (when to set detected=true):
-A. Explicit abuse or assault by a current/former partner, OR
-B. Legal/procedural evidence (e.g., restraining order, police DV report, prior DV arrest), OR
-C. Credible threats/stalking/jealousy/control/separation/sexual exploitation tied to the partner, OR
-D. 2 or more signals of non-legal indicators that plausibly link the partner to coercion/violence (e.g., recent separation + threats + witness reports).
-Note: "recent separation" alone is NOT sufficient.
+DETECTION (detected=true when):
+  A. Any abuse/assault BY partner against deceased OR
+  B. Women's shelter stay OR legal evidence (restraining order, DV report/arrest) OR
+  C. "Domestic issues" where deceased wasn't perpetrator OR
+  D. 2 or more other indicators suggesting deceased was IPV victim
 
-CONFIDENCE CALIBRATION:
-- 0.90–1.00: direct DV evidence (A/B) or multiple strong C/D signals.
-- 0.70–0.89: strong but indirect signals; likely IPV.
-- 0.40–0.69: one moderate signal (e.g., threats) with weak support.
-- 0.05–0.39: weak/ambiguous context only (e.g., breakup without abuse).
-- 0.00: narrative negates IPV.
+CONFIDENCE:
+  - HIGH (0.70-1.00): Women's shelter, legal evidence, explicit abuse, or 2+ strong indicators
+  - MODERATE (0.30-0.69): Single indicator or ambiguous evidence
+  - LOW (0.00-0.29): No indicators or deceased was perpetrator
 
-OUTPUT RULES:
-- Return ONE JSON object with keys: detected:boolean, confidence:number (0–1), indicators:array[string], rationale:string (≤200 chars).
-- indicators must be a subset of the VOCAB (dedupe; 0–5 items).
-- rationale: concise, cites narrative facts; no chain-of-thought; no quotes >10 words.
-- No extra keys, no prose, no code fences.
+OUTPUT: Single JSON with detected:boolean, confidence:number, indicators:array (0-5 items from vocab), rationale:string (≤200 chars)
 )"
 
 user_template <- r"(
-Analyze the following death investigation narrative for intimate partner violence (IPV).
+Analyze if the deceased was VICTIM of IPV from intimate partner (NOT from parents/family, NOT as perpetrator).
 
 Narrative:
 <<TEXT>>
-Respond ONLY with a single valid JSON object matching:
+
+Return ONLY this JSON:
 {
-  "detected": <true|false>,
-  "confidence": <number between 0 and 1>,
-  "indicators": ["<tokens from the indicator vocab>"],
-  "rationale": "<≤200 chars, concise justification using facts from the narrative>"
+  "detected": true/false,
+  "confidence": 0.00-1.00,
+  "indicators": ["exact tokens from vocab list"],
+  "rationale": "≤200 char fact-based explanation"
 }
-Do not include chain-of-thought, explanations, or extra text. If no indicators are supported by the narrative, use [] and set a low confidence per the calibration.
+
+Remember: women's shelter or "domestic issues" (when deceased wasn't perpetrator) = detected=true, confidence≥0.70
 )"
 
 # =============================================================================
@@ -142,64 +142,64 @@ data_long <- data %>%
 
 data_long |> filter(M_flag_ind == TRUE)
 
-
-# # testing parameter
-
-row_num = 18
-
-# Initialize results storage
-results <- list()
-request <- list()
-
-# now we will run the benchmark for each row
-request$type = data_long$Type[row_num]
-request$narrative_text = data_long$Narrative[row_num] 
-request$m_flag_ind = data_long$M_flag_ind[row_num]
-request$m_flag = data_long$M_flag[row_num]
-
-request$system_prompt = system_prompt
-request$incident_id = data_long$IncidentID[row_num]
-request$narrative_text 
-request$user_prompt <- glue::glue(user_template, TEXT = request$narrative_text, .open = '<<', .close = '>>')
-request$user_prompt
-request$model = MODELS[1]
-request$temperature = 0.5
-#  the llm call
-tic()
-# Call LLM
-response <- tryCatch({
-  call_llm(
-    system_prompt = request$system_prompt,
-    user_prompt = request$user_prompt,
-    api_url = API_URL,
-    model = request$model,
-    temperature = request$temperature
-  )
-}, error = function(e) {
-  list(error = TRUE, error_message = as.character(e))
-})
-# save the r results
-r_result <- toc(quiet = TRUE)
-request$response_sec <- as.numeric(r_result$toc - r_result$tic)
-response
-# str(response)
-result_tibble <- parse_llm_result(response, narrative_id = request$incident_id)
-
-# Add request metadata to the result
-result_tibble <- result_tibble |> 
-  dplyr::mutate(
-    incident_id = request$incident_id,
-    narrative_type = request$type,
-    manual_flag_ind = request$m_flag_ind,
-    manual_flag = request$m_flag,
-    response_sec = request$response_sec,
-    user_prompt = request$user_prompt,
-    system_prompt = request$system_prompt,
-    temperature = request$temperature
-
-  )
-
-result_tibble 
+# 
+# # # testing parameter
+# 
+# row_num = 18
+# 
+# # Initialize results storage
+# results <- list()
+# request <- list()
+# 
+# # now we will run the benchmark for each row
+# request$type = data_long$Type[row_num]
+# request$narrative_text = data_long$Narrative[row_num] 
+# request$m_flag_ind = data_long$M_flag_ind[row_num]
+# request$m_flag = data_long$M_flag[row_num]
+# 
+# request$system_prompt = system_prompt
+# request$incident_id = data_long$IncidentID[row_num]
+# request$narrative_text 
+# request$user_prompt <- glue::glue(user_template, TEXT = request$narrative_text, .open = '<<', .close = '>>')
+# request$user_prompt
+# request$model = MODELS[1]
+# request$temperature = 0.5
+# #  the llm call
+# tic()
+# # Call LLM
+# response <- tryCatch({
+#   call_llm(
+#     system_prompt = request$system_prompt,
+#     user_prompt = request$user_prompt,
+#     api_url = API_URL,
+#     model = request$model,
+#     temperature = request$temperature
+#   )
+# }, error = function(e) {
+#   list(error = TRUE, error_message = as.character(e))
+# })
+# # save the r results
+# r_result <- toc(quiet = TRUE)
+# request$response_sec <- as.numeric(r_result$toc - r_result$tic)
+# response
+# # str(response)
+# result_tibble <- parse_llm_result(response, narrative_id = request$incident_id)
+# 
+# # Add request metadata to the result
+# result_tibble <- result_tibble |> 
+#   dplyr::mutate(
+#     incident_id = request$incident_id,
+#     narrative_type = request$type,
+#     manual_flag_ind = request$m_flag_ind,
+#     manual_flag = request$m_flag,
+#     response_sec = request$response_sec,
+#     user_prompt = request$user_prompt,
+#     system_prompt = request$system_prompt,
+#     temperature = request$temperature
+# 
+#   )
+# 
+# result_tibble 
 
 # =============================================================================
 # RUN BATCH PROCESSING FOR ALL NARRATIVES
@@ -366,13 +366,63 @@ run_all_narratives <- function(data_long, system_prompt, user_template,
 # =============================================================================
 
 # Run for first model
+all_results_1 <- run_all_narratives(
+  data_long = data_long,
+  system_prompt = system_prompt,
+  user_template = user_template,
+  model = MODELS[1],
+  api_url = API_URL,
+  temperature = 0.1
+)
+
+# Run for second model
+all_results_2 <- run_all_narratives(
+  data_long = data_long,
+  system_prompt = system_prompt,
+  user_template = user_template,
+  model = MODELS[1],
+  api_url = API_URL,
+  temperature = 0.2
+)
+
+# Run for third model
+all_results_3 <- run_all_narratives(
+  data_long = data_long,
+  system_prompt = system_prompt,
+  user_template = user_template,
+  model = MODELS[1],
+  api_url = API_URL,
+  temperature = 0.0
+)
+
+all_results = all_results_3
+# Calculate metrics
+if (nrow(all_results) > 0) {
+  valid_results <- all_results %>%
+    filter(!is.na(detected) & !is.na(manual_flag_ind))
+  
+  if (nrow(valid_results) > 0) {
+    accuracy <- mean(valid_results$detected == valid_results$manual_flag_ind)
+    sensitivity <- mean(valid_results$detected[valid_results$manual_flag_ind == TRUE])
+    specificity <- mean(!valid_results$detected[valid_results$manual_flag_ind == FALSE])
+    
+    cat("\nModel Performance:\n")
+    cat("  Processed:", nrow(all_results), "narratives\n")
+    cat("  Valid results:", nrow(valid_results), "\n")
+    cat("  Accuracy:", sprintf("%.2f%%", accuracy * 100), "\n")
+    cat("  Sensitivity:", sprintf("%.2f%%", sensitivity * 100), "\n")
+    cat("  Specificity:", sprintf("%.2f%%", specificity * 100), "\n")
+  }
+}
+
+# Run for second model
 all_results <- run_all_narratives(
   data_long = data_long,
   system_prompt = system_prompt,
   user_template = user_template,
   model = MODELS[1],
   api_url = API_URL,
-  temperature = 0.5
+  temperature = 0.2
 )
 
 # Calculate metrics

@@ -16,13 +16,15 @@
 #'   \describe{
 #'     \item{detected}{Logical. TRUE if IPV detected, FALSE if not, NA if parsing failed}
 #'     \item{confidence}{Numeric. Confidence score 0.0-1.0, NA if not available}
+#'     \item{indicators}{List. Array of indicator tokens from the vocabulary}
+#'     \item{rationale}{Character. Concise justification for the detection}
+#'     \item{reasoning}{Character. Model's reasoning/thinking process if available}
 #'     \item{model}{Character. The model used for generation}
 #'     \item{created_at}{Character. ISO timestamp from the response}
 #'     \item{response_id}{Character. Unique identifier for this completion}
 #'     \item{tokens_used}{Integer. Total tokens consumed}
 #'     \item{prompt_tokens}{Integer. Tokens in the prompt}
 #'     \item{completion_tokens}{Integer. Tokens in the completion}
-#'     \item{response_time_ms}{Numeric. Response time if available}
 #'     \item{narrative_id}{Character. User-provided narrative identifier}
 #'     \item{narrative_length}{Integer. Length of input narrative if available}
 #'     \item{parse_error}{Logical. TRUE if JSON parsing failed}
@@ -71,8 +73,7 @@ parse_llm_result <- function(llm_response, narrative_id = NULL, metadata = NULL)
   # Extract all metadata components
   result <- result |>
     extract_response_metadata(llm_response) |>
-    extract_usage_metadata(llm_response) |>
-    extract_test_metadata(llm_response)
+    extract_usage_metadata(llm_response)
 
   # Extract reasoning if present
   reasoning <- extract_reasoning(llm_response)
@@ -103,18 +104,17 @@ initialize_parse_result <- function(narrative_id, metadata) {
     confidence = NA_real_,
     indicators = list(NULL),  # List column for array of indicators
     rationale = NA_character_,
+    reasoning = NA_character_,  # Reasoning field right after rationale
     model = NA_character_,
     created_at = NA_character_,
     response_id = NA_character_,
     tokens_used = NA_integer_,
     prompt_tokens = NA_integer_,
     completion_tokens = NA_integer_,
-    response_time_ms = NA_real_,
     narrative_id = narrative_id,
     parse_error = FALSE,
     error_message = NA_character_,
-    raw_response = NA_character_,
-    reasoning = NA_character_  # Add reasoning field
+    raw_response = NA_character_
   )
 }
 
@@ -186,18 +186,6 @@ extract_usage_metadata <- function(result, response) {
     result$completion_tokens <- safe_extract(
       usage, "completion_tokens", as.integer, NA_integer_
     )
-  }
-  result
-}
-
-# Helper: Extract test metadata
-extract_test_metadata <- function(result, response) {
-  test_meta <- response$test_metadata
-  if (!is.null(test_meta)) {
-    elapsed <- test_meta$elapsed_seconds
-    if (!is.null(elapsed)) {
-      result$response_time_ms <- as.numeric(elapsed) * 1000
-    }
   }
   result
 }
