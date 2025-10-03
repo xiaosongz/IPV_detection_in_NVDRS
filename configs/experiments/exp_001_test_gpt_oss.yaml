@@ -7,7 +7,7 @@ model:
   name: "mlx-community/gpt-oss-120b"
   provider: "mlx"
   api_url: "http://localhost:1234/v1/chat/completions"
-  temperature: 0.1
+  temperature: 0.2
 
 prompt:
   version: "v2.1_andrea"
