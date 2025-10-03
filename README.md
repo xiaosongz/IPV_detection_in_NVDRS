@@ -203,6 +203,80 @@ The other 10,000 lines? Abstractions that make simple things complicated.
 
 This project rejects that. One function. Clear purpose. You control everything else.
 
+---
+
+## Quick Start: Running Experiments
+
+### New System (October 2025) ⭐ **Use This**
+
+The project now uses a YAML-based experiment tracking system for systematic evaluation.
+
+**1. Initialize database (first time only)**:
+```bash
+Rscript scripts/init_database.R
+```
+
+**2. Create experiment config**:
+```bash
+# Copy template
+cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/my_experiment.yaml
+
+# Edit your config (change model, prompts, temperature, etc.)
+```
+
+**3. Run experiment**:
+```bash
+Rscript scripts/run_experiment.R configs/experiments/my_experiment.yaml
+```
+
+**4. Query results**:
+```r
+library(DBI)
+library(RSQLite)
+
+conn <- dbConnect(RSQLite::SQLite(), "experiments.db")
+
+# List all experiments
+dbGetQuery(conn, "SELECT experiment_id, experiment_name, f1_ipv, recall_ipv, precision_ipv
+                  FROM experiments ORDER BY created_at DESC")
+
+# Get detailed results for specific experiment
+dbGetQuery(conn, "SELECT * FROM narrative_results WHERE experiment_id = 'YOUR_ID'")
+
+# Find false positives
+dbGetQuery(conn, "SELECT incident_id, confidence, rationale 
+                  FROM narrative_results 
+                  WHERE experiment_id = 'YOUR_ID' AND is_false_positive = 1")
+
+dbDisconnect(conn)
+```
+
+### Benefits of New System
+
+- **Configuration-driven**: No code changes needed for new experiments
+- **Full tracking**: Every experiment stored in database with metadata
+- **Comprehensive logging**: 4 log files per experiment for debugging
+- **Easy comparison**: SQL queries to compare models/prompts
+- **Faster data loading**: Excel → SQLite once, then 50-100x faster queries
+
+### Old System (Deprecated)
+
+Old `run_benchmark*.R` scripts in `scripts/archive/` are deprecated.
+Do not use them for new experiments. They required manual script editing and had no systematic tracking.
+
+---
+
+## Documentation
+
+- [Testing Instructions](TESTING_INSTRUCTIONS.md) - How to run tests
+- [Phase 1 Complete](PHASE1_IMPLEMENTATION_COMPLETE.md) - Implementation guide
+- [Phase 2 Complete](PHASE2_COMPLETE_SUMMARY.md) - Full system overview
+- [Code Organization Review](docs/20251003-code_organization_review.md) - Architecture & cleanup plan
+- [Quick Cleanup Steps](docs/QUICK_CLEANUP_STEPS.md) - Maintenance guide
+- [Scripts README](scripts/README.md) - Script usage guide
+
+---
+
 ## License
 
 MIT. Do whatever you want with it.

@@ -1,3 +1,34 @@
+#' @file experiment_utils.R
+#' @section DEPRECATED - DO NOT USE FOR NEW CODE:
+#' **This file contains legacy functions from the R&D phase (August 2025).**
+#'
+#' These functions were used during initial development before the YAML-based
+#' experiment tracking system was implemented (October 2025).
+#'
+#' ## ⚠️ WARNING: Function Name Collisions
+#' Several functions in this file have the SAME NAMES as functions in the new system:
+#' - `start_experiment()` - Conflicts with experiment_logger::start_experiment()
+#' - `list_experiments()` - Conflicts with experiment_queries::list_experiments()
+#'
+#' Depending on which file R loads last, you'll get different behavior!
+#'
+#' ## For New Code, Use Instead:
+#' - **experiment_logger.R** - For experiment tracking (start/log/finalize)
+#' - **experiment_queries.R** - For querying results
+#' - **run_experiment.R** - For running complete experiments
+#'
+#' ## Migration Timeline:
+#' - Oct 2025: Marked deprecated (this notice added)
+#' - Nov 2025: Will be moved to R/legacy/
+#' - Dec 2025: May be removed entirely
+#'
+#' ## If You Need This Code:
+#' Contact the maintainer before the Nov 2025 cleanup. We can extract any
+#' useful functions and add them to the new system.
+#'
+#' @keywords internal deprecated
+NULL
+
 #' Experiment utilities for R&D phase
 #' 
 #' Optional functions for tracking prompt experiments.

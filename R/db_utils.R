@@ -1,3 +1,34 @@
+#' @file db_utils.R
+#' @section DEPRECATED - DO NOT USE FOR NEW CODE:
+#' **This file contains legacy database utilities (pre-October 2025).**
+#'
+#' This file was created during the R&D phase and supports both SQLite and PostgreSQL.
+#' The new system (Oct 2025) uses a simpler, SQLite-only approach.
+#'
+#' ## ⚠️ WARNING: Function Name Collision
+#' `get_db_connection()` in this file CONFLICTS with db_schema::get_db_connection()
+#'
+#' The two functions have different signatures and behavior:
+#' - This version: Supports PostgreSQL, complex connection handling
+#' - New version (db_schema.R): SQLite-only, simple and focused
+#'
+#' ## For New Code, Use Instead:
+#' - **db_schema.R** - For database schema management and connections
+#' - **data_loader.R** - For loading data into database
+#' - **experiment_logger.R** - For storing results
+#'
+#' ## PostgreSQL Support
+#' If you need PostgreSQL support, this file may still be useful.
+#' However, the new system (Oct 2025) focuses on SQLite for simplicity.
+#'
+#' ## Migration Timeline:
+#' - Oct 2025: Marked deprecated (this notice added)
+#' - Nov 2025: Will be moved to R/legacy/
+#' - Dec 2025: Decision on PostgreSQL support
+#'
+#' @keywords internal deprecated
+NULL
+
 #' Database connection utilities for SQLite and PostgreSQL
 #' 
 #' Simple database utilities supporting both SQLite (local) and PostgreSQL (scalable).
