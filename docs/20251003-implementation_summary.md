@@ -85,18 +85,18 @@ validate_phase1.sh (65 lines)         - Structure validator
 
 ### Option 1: RStudio (Recommended)
 ```r
-setwd("/Volumes/DATA/git/IPV_detection_in_NVDRS")
-source('run_phase1_test.R')
+# Use here::here() - automatically finds project root
+source('tests/run_phase1_test.R')
 ```
 
 ### Option 2: Command Line
 ```bash
-cd /Volumes/DATA/git/IPV_detection_in_NVDRS
-./test_phase1.sh
+# From project root
+Rscript tests/run_phase1_test.R
 ```
 
 ### Option 3: Manual Step-by-Step
-See **TESTING_INSTRUCTIONS.md** for detailed manual testing
+See **20251003-testing_instructions.md** for detailed manual testing
 
 ---
 

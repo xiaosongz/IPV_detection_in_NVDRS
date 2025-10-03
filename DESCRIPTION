@@ -17,19 +17,19 @@ Imports:
     jsonlite (>= 1.8.0),
     DBI,
     RSQLite,
-    RPostgres,
-    digest
-Suggests: 
-    testthat (>= 3.0.0),
     here (>= 1.0.0),
-    mockery,
+    yaml,
     readxl,
     dplyr,
     purrr,
     tibble,
     rlang,
-    dotenv,
-    yaml
+    digest
+Suggests: 
+    testthat (>= 3.0.0),
+    mockery,
+    RPostgres,
+    dotenv
 Config/testthat/edition: 3
 URL: https://github.com/xiaosongz/IPV_detection_in_NVDRS
 BugReports: https://github.com/xiaosongz/IPV_detection_in_NVDRS/issues

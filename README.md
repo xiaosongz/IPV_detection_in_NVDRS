@@ -1,6 +1,28 @@
-# IPV Detection in NVDRS
+# IPV Detection in NVDRS Using LLM APIs
 
 A minimal function that detects intimate partner violence in death narratives. That's it.
+
+---
+
+## 🚀 Quick Start
+
+**Get running in 5 minutes**: See [docs/QUICK_START.md](docs/QUICK_START.md) ⭐
+
+**TL;DR**:
+```bash
+# 1. Install packages
+Rscript -e "install.packages(c('here','DBI','RSQLite','yaml','readxl','dplyr','httr2','jsonlite'))"
+
+# 2. Copy config (edit if needed)
+cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/test.yaml
+
+# 3. Run
+Rscript scripts/run_experiment.R configs/experiments/test.yaml
+```
+
+**Done!** Results in `data/experiments.db`, logs in `logs/experiments/`.
+
+---
 
 ## What This Is
 

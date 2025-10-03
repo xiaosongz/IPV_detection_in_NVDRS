@@ -1,12 +1,9 @@
 #!/usr/bin/env Rscript
-# Standalone Phase 1 Test - Run with: R CMD BATCH run_phase1_test.R
+# Standalone Phase 1 Test - Run with: Rscript tests/run_phase1_test.R
 
 cat("\n========================================\n")
 cat("Phase 1 Implementation Test\n")
 cat("========================================\n\n")
-
-# Set working directory
-setwd("/Volumes/DATA/git/IPV_detection_in_NVDRS")
 
 # Load required libraries
 cat("Step 1: Loading libraries...\n")
@@ -20,7 +17,7 @@ for (lib in required_libs) {
   }
 }
 
-library(here)
+library(here)  # Automatically finds project root
 library(DBI)
 library(RSQLite)
 library(yaml)

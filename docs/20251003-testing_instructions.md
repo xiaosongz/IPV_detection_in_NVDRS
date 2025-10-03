@@ -28,16 +28,12 @@ All Phase 1 code is implemented and structurally validated. Now needs functional
 ### Option 1: Standalone Test Script (Recommended)
 
 ```bash
-cd /Volumes/DATA/git/IPV_detection_in_NVDRS
+# From project root
+Rscript tests/run_phase1_test.R
 
-# Open RStudio and run:
-source('run_phase1_test.R')
-
-# OR from terminal if R is in PATH:
-R CMD BATCH run_phase1_test.R
-
-# OR:
-Rscript run_phase1_test.R
+# OR from anywhere (here::here() finds project root)
+cd ~/anywhere
+Rscript /path/to/project/tests/run_phase1_test.R
 ```
 
 This script tests ALL Phase 1 functionality:
@@ -53,10 +49,7 @@ This script tests ALL Phase 1 functionality:
 ### Option 2: Manual Testing in RStudio
 
 ```r
-# Set working directory
-setwd("/Volumes/DATA/git/IPV_detection_in_NVDRS")
-
-# Load libraries
+# here::here() automatically finds project root
 library(here)
 library(DBI)
 library(RSQLite)
@@ -212,16 +205,17 @@ install.packages("package_name")
 ```
 
 **Issue: File not found**
-```
-# Solution: Check working directory
-getwd()
-setwd("/Volumes/DATA/git/IPV_detection_in_NVDRS")
+```r
+# Use here::here() for portable paths
+library(here)
+here()  # Shows project root
+list.files(here("configs/experiments"))  # List configs
 ```
 
 **Issue: Database creation fails**
-```
-# Solution: Check write permissions
-file.access(getwd(), mode = 2)  # Should return 0
+```r
+# Check write permissions
+file.access(here(), mode = 2)  # Should return 0
 ```
 
 **Issue: Config validation fails**
