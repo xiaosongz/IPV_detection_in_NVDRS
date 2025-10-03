@@ -81,4 +81,13 @@ logs/*
 
 # Checkpoint files
 checkpoints/*
-!checkpoints/.gitkeep 
+!checkpoints/.gitkeep
+
+# Experiment tracking databases
+experiments.db
+test_experiments.db
+*.db-shm
+*.db-wal
+
+# Experiment logs (too large for git)
+logs/experiments/*/ 
