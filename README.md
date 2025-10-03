@@ -211,25 +211,26 @@ This project rejects that. One function. Clear purpose. You control everything e
 
 The project now uses a YAML-based experiment tracking system for systematic evaluation.
 
-**1. Initialize database (first time only)**:
-```bash
-Rscript scripts/init_database.R
-```
+**Just run the experiment** - everything else is automatic:
 
-**2. Create experiment config**:
 ```bash
-# Copy template
+# 1. Create experiment config
 cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/my_experiment.yaml
-
 # Edit your config (change model, prompts, temperature, etc.)
-```
 
-**3. Run experiment**:
-```bash
+# 2. Run experiment (that's it!)
 Rscript scripts/run_experiment.R configs/experiments/my_experiment.yaml
 ```
 
-**4. Query results**:
+The script automatically:
+- Initializes database (first time only)
+- Loads data from Excel (first time only)
+- Processes narratives with LLM
+- Logs everything
+- Computes metrics
+- Saves results
+
+**Query results**:
 ```r
 library(DBI)
 library(RSQLite)

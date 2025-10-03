@@ -13,13 +13,25 @@ They have been superseded by the new YAML-based system.
 Rscript scripts/run_experiment.R configs/experiments/exp_001.yaml
 ```
 
+**That's it!** The script handles everything automatically:
+- Database initialization (first time)
+- Data loading (first time)
+- LLM processing
+- Logging
+- Metrics computation
+- Result storage
+
 ## What These Did
 
+### Benchmark Scripts (Archived Aug-Sep 2025)
 - `run_benchmark.R` - Original benchmark runner
 - `run_benchmark_optimized.R` - Optimized version with batching
 - `run_benchmark_updated.R` - Updated version
 - `run_benchmark_andrea_09022025.R` - Andrea's experimental version
-- `migrate_sqlite_to_postgres.R` - One-time PostgreSQL migration tool
+
+### Utility Scripts (Archived Oct 2025)
+- `migrate_sqlite_to_postgres.R` - One-time PostgreSQL migration tool (unused)
+- `init_database.R` - Standalone database initializer (now built into run_experiment.R)
 
 All functionality is now available through `run_experiment.R` with YAML configs.
 

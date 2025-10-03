@@ -1,8 +1,8 @@
 # Scripts Directory
 
-## Active Scripts (Use These)
+## Active Script (Only One!)
 
-### run_experiment.R ⭐
+### run_experiment.R ⭐ **This is All You Need**
 Main experiment runner. Runs experiments from YAML configuration files.
 
 **Usage**:
@@ -11,30 +11,18 @@ Rscript scripts/run_experiment.R configs/experiments/exp_001.yaml
 ```
 
 **What it does**:
-1. Loads data from Excel into SQLite (first time only)
-2. Runs LLM on specified narratives
-3. Logs all details (4 log files per experiment)
-4. Saves results to database
-5. Computes performance metrics (precision, recall, F1)
-6. Optionally exports CSV/JSON
+1. **Auto-initializes database** (first time only)
+2. Loads data from Excel into SQLite (first time only)
+3. Runs LLM on specified narratives
+4. Logs all details (4 log files per experiment)
+5. Saves results to database
+6. Computes performance metrics (precision, recall, F1)
+7. Optionally exports CSV/JSON
 
 **Input**: YAML configuration file  
 **Output**: Database records + optional CSV/JSON files
 
-### init_database.R
-One-time database initialization.
-
-**Usage**:
-```bash
-Rscript scripts/init_database.R [optional_db_path]
-```
-
-**What it does**:
-- Creates `experiments.db` with 3 tables
-- Sets up indexes for fast queries
-- Shows table schemas
-
-**When to use**: First time setup, or to recreate database
+**Note**: No setup needed! The script handles everything automatically.
 
 ## Archived Scripts
 
@@ -61,22 +49,21 @@ See [YAML Configuration Guide](../docs/20251003-unified_experiment_automation_pl
 
 ## Workflow
 
-**Typical workflow**:
+**Typical workflow** (Just 2 steps!):
 
 ```bash
-# 1. Initialize database (first time only)
-Rscript scripts/init_database.R
-
-# 2. Create experiment config
+# 1. Create experiment config
 cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/my_exp.yaml
 # Edit my_exp.yaml with your settings
 
-# 3. Run experiment  
+# 2. Run experiment (that's it!)
 Rscript scripts/run_experiment.R configs/experiments/my_exp.yaml
 
-# 4. Query results
+# 3. Query results
 sqlite3 experiments.db "SELECT * FROM experiments ORDER BY created_at DESC LIMIT 1;"
 ```
+
+**Note**: No initialization step needed! The script does it automatically.
 
 ## Troubleshooting
 
