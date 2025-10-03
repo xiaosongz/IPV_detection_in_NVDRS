@@ -1,0 +1,20 @@
+# Database Configuration File
+# Edit this file to change database locations
+
+# Main experiments database
+# Default: data/experiments.db
+EXPERIMENTS_DB=data/experiments.db
+
+# Test database  
+# Default: tests/fixtures/test_experiments.db
+TEST_DB=tests/fixtures/test_experiments.db
+
+# Instructions:
+# 1. Edit the paths above to your preferred locations
+# 2. Use absolute paths or relative paths from project root
+# 3. Directories will be created automatically if they don't exist
+#
+# Examples:
+#   EXPERIMENTS_DB=data/experiments.db                    # Relative path
+#   EXPERIMENTS_DB=/Users/yourname/databases/ipv.db       # Absolute path
+#   EXPERIMENTS_DB=~/Documents/research/experiments.db    # Home directory

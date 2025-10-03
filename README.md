@@ -235,7 +235,7 @@ The script automatically:
 library(DBI)
 library(RSQLite)
 
-conn <- dbConnect(RSQLite::SQLite(), "experiments.db")
+conn <- dbConnect(RSQLite::SQLite(), "data/experiments.db")
 
 # List all experiments
 dbGetQuery(conn, "SELECT experiment_id, experiment_name, f1_ipv, recall_ipv, precision_ipv
@@ -255,10 +255,23 @@ dbDisconnect(conn)
 ### Benefits of New System
 
 - **Configuration-driven**: No code changes needed for new experiments
+- **Configurable database**: Edit `.db_config` to change database location
+- **Clean organization**: Database in `data/` directory, not root
 - **Full tracking**: Every experiment stored in database with metadata
 - **Comprehensive logging**: 4 log files per experiment for debugging
 - **Easy comparison**: SQL queries to compare models/prompts
 - **Faster data loading**: Excel → SQLite once, then 50-100x faster queries
+
+**Configure database location**: Edit `.db_config` file in project root
+```bash
+# Default (recommended)
+EXPERIMENTS_DB=data/experiments.db
+
+# Or use absolute path
+EXPERIMENTS_DB=/path/to/your/database.db
+```
+
+See [Database Configuration Guide](docs/20251003-database_configuration_guide.md) for details.
 
 ### Old System (Deprecated)
 
