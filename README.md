@@ -268,11 +268,13 @@ Do not use them for new experiments. They required manual script editing and had
 
 ## Documentation
 
-- [Testing Instructions](TESTING_INSTRUCTIONS.md) - How to run tests
-- [Phase 1 Complete](PHASE1_IMPLEMENTATION_COMPLETE.md) - Implementation guide
-- [Phase 2 Complete](PHASE2_COMPLETE_SUMMARY.md) - Full system overview
+- **[Documentation Index](docs/20251003-INDEX.md)** - Complete guide to all documentation ⭐
+- [Testing Instructions](docs/20251003-testing_instructions.md) - How to run tests
+- [Phase 1 Complete](docs/20251003-phase1_implementation_complete.md) - Implementation guide
+- [Phase 2 Complete](docs/20251003-phase2_implementation_complete.md) - Full system overview
+- [Implementation Summary](docs/20251003-implementation_summary.md) - Quick reference
+- [Cleanup Status](docs/20251003-cleanup_complete_summary.md) - Current status & recommendations
 - [Code Organization Review](docs/20251003-code_organization_review.md) - Architecture & cleanup plan
-- [Quick Cleanup Steps](docs/QUICK_CLEANUP_STEPS.md) - Maintenance guide
 - [Scripts README](scripts/README.md) - Script usage guide
 
 ---

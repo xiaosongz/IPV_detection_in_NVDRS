@@ -57,7 +57,7 @@ Experiment configs are stored in `configs/experiments/`:
 - `exp_001_test_gpt_oss.yaml` - Template for GPT-OSS-120B experiments
 - Create new configs by copying and editing templates
 
-See [YAML Configuration Guide](../docs/EXPERIMENT_WORKFLOW.md) for details.
+See [YAML Configuration Guide](../docs/20251003-unified_experiment_automation_plan.md) for details.
 
 ## Workflow
 
@@ -88,4 +88,4 @@ sqlite3 experiments.db "SELECT * FROM experiments ORDER BY created_at DESC LIMIT
 
 **Config error**: Validate YAML syntax and file paths
 
-See [Testing Instructions](../TESTING_INSTRUCTIONS.md) for more help.
+See [Testing Instructions](../docs/20251003-testing_instructions.md) for more help.
