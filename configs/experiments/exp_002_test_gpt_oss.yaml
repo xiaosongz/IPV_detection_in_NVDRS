@@ -1,6 +1,6 @@
 experiment:
   name: "Test GPT-OSS-120B Baseline"
-  author: "claude"
+  author: "Xiaosong"
   notes: "Testing new experiment tracking system with mlx-community/gpt-oss-120b model"
 
 model:
@@ -10,7 +10,7 @@ model:
   temperature: 0.2
 
 prompt:
-  version: "v2.1_andrea"
+  version: "v2.1_April"
   system_prompt: |
     /think hard!
     ROLE: Identify if the deceased was the VICTIM of intimate partner violence (IPV).

@@ -18,6 +18,7 @@ cat("                    IPV Detection Experiment Runner\n")
 cat("================================================================================\n\n")
 
 # Source all required functions
+source(here("R", "db_config.R"))      # FIRST: Centralized config
 source(here("R", "db_schema.R"))
 source(here("R", "data_loader.R"))
 source(here("R", "config_loader.R"))
@@ -63,13 +64,13 @@ tryCatch({
 
 # Connect to database
 cat("Step 2: Connecting to database...\n")
-db_path <- here("experiments.db")
+db_path <- get_experiments_db_path()  # Uses centralized config
 
 if (!file.exists(db_path)) {
   cat("  Database not found. Initializing...\n")
-  conn <- init_experiment_db(db_path)
+  conn <- init_experiment_db()  # Will use centralized config
 } else {
-  conn <- get_db_connection(db_path)
+  conn <- get_db_connection()  # Will use centralized config
 }
 cat("✓ Connected to database:", db_path, "\n\n")
 

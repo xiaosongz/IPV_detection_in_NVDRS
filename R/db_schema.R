@@ -2,15 +2,19 @@
 #'
 #' Creates SQLite database with experiments, narrative_results, and source_narratives tables
 #'
-#' @param db_path Path to SQLite database file (default: "experiments.db")
+#' @param db_path Path to SQLite database file. If NULL, uses centralized config.
 #' @return DBI connection object
 #' @export
 #' @examples
 #' \dontrun{
-#'   conn <- init_experiment_db("experiments.db")
+#'   conn <- init_experiment_db()  # Uses centralized config
+#'   conn <- init_experiment_db("custom.db")  # Custom path
 #'   dbDisconnect(conn)
 #' }
-init_experiment_db <- function(db_path = here::here("experiments.db")) {
+init_experiment_db <- function(db_path = NULL) {
+  if (is.null(db_path)) {
+    db_path <- get_experiments_db_path()
+  }
   if (!requireNamespace("DBI", quietly = TRUE)) {
     stop("Package 'DBI' is required but not installed.")
   }
@@ -139,10 +143,13 @@ init_experiment_db <- function(db_path = here::here("experiments.db")) {
 #'
 #' Opens connection to experiment database with error handling
 #'
-#' @param db_path Path to SQLite database file
+#' @param db_path Path to SQLite database file. If NULL, uses centralized config.
 #' @return DBI connection object
 #' @export
-get_db_connection <- function(db_path = here::here("experiments.db")) {
+get_db_connection <- function(db_path = NULL) {
+  if (is.null(db_path)) {
+    db_path <- get_experiments_db_path()
+  }
   if (!file.exists(db_path)) {
     stop("Database not found at: ", db_path, "\nPlease run init_experiment_db() first.")
   }
