@@ -9,6 +9,7 @@
 # Load required functions
 source("R/build_prompt.R")
 source("R/call_llm.R")
+source("R/repair_json.R")
 source("R/parse_llm_result.R")
 source("R/store_llm_result.R")
 source("R/db_utils.R")

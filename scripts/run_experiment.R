@@ -26,6 +26,7 @@ source(here("R", "experiment_logger.R"))
 source(here("R", "experiment_queries.R"))
 source(here("R", "run_benchmark_core.R"))
 source(here("R", "call_llm.R"))
+source(here("R", "repair_json.R"))
 source(here("R", "parse_llm_result.R"))
 source(here("R", "build_prompt.R"))
 

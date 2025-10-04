@@ -8,6 +8,7 @@
 # Load required functions
 source("R/build_prompt.R")
 source("R/call_llm.R")
+source("R/repair_json.R")
 source("R/parse_llm_result.R")
 
 # Example 1: Basic usage with IPV detection
