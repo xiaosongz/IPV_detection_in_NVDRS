@@ -1,8 +1,8 @@
 # Scripts Directory
 
-## Active Script (Only One!)
+## Active Scripts
 
-### run_experiment.R ⭐ **This is All You Need**
+### run_experiment.R ⭐ **Main Workflow**
 Main experiment runner. Runs experiments from YAML configuration files.
 
 **Usage**:
@@ -23,6 +23,40 @@ Rscript scripts/run_experiment.R configs/experiments/exp_001.yaml
 **Output**: Database records + optional CSV/JSON files
 
 **Note**: No setup needed! The script handles everything automatically.
+
+### view_experiment.R 🔍 **Query Results**
+View comprehensive details about completed experiments.
+
+**Usage**:
+```bash
+# View latest experiment
+Rscript scripts/view_experiment.R latest
+
+# View specific experiment (use UUID from database)
+Rscript scripts/view_experiment.R 60376368-2f1b-4b08-81a9-2f0ea815cd21
+
+# List recent experiments
+Rscript scripts/view_experiment.R
+```
+
+**What it shows**:
+- Model configuration (name, temperature, API URL)
+- Complete prompts (system + user templates)
+- Data processing stats (total, processed, skipped)
+- Performance metrics (accuracy, precision, recall, F1)
+- Confusion matrix (TP, TN, FP, FN)
+- Timing information (runtime, avg per narrative)
+- Output file locations (CSV, JSON, logs)
+- System info (R version, OS, hostname)
+
+**Use cases**:
+- Quick status check of running experiments
+- Review completed experiment details
+- Find output files for specific runs
+- Compare prompts across experiments
+- Document results for papers/reports
+
+**See also**: [Experiment ID Guide](../docs/20251003-experiment_id_guide.md) for understanding UUIDs and querying experiments.
 
 ## Archived Scripts
 
@@ -47,20 +81,22 @@ Experiment configs are stored in `configs/experiments/`:
 
 See [YAML Configuration Guide](../docs/20251003-unified_experiment_automation_plan.md) for details.
 
+**Database location**: Configured in `.db_config` file (defaults to `data/experiments.db`)
+
 ## Workflow
 
-**Typical workflow** (Just 2 steps!):
+**Typical workflow**:
 
 ```bash
 # 1. Create experiment config
 cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/my_exp.yaml
 # Edit my_exp.yaml with your settings
 
-# 2. Run experiment (that's it!)
+# 2. Run experiment
 Rscript scripts/run_experiment.R configs/experiments/my_exp.yaml
 
-# 3. Query results
-sqlite3 experiments.db "SELECT * FROM experiments ORDER BY created_at DESC LIMIT 1;"
+# 3. View results
+Rscript scripts/view_experiment.R latest
 ```
 
 **Note**: No initialization step needed! The script does it automatically.
@@ -69,10 +105,12 @@ sqlite3 experiments.db "SELECT * FROM experiments ORDER BY created_at DESC LIMIT
 
 **Script not found**: Make sure you're in the project root directory
 
-**Database error**: Run `init_database.R` first
+**Database location**: Check `.db_config` file or run `Rscript -e 'source("R/db_config.R"); print_db_config()'`
 
 **LLM API error**: Check that LM Studio is running at http://localhost:1234
 
 **Config error**: Validate YAML syntax and file paths
+
+**Experiment ID questions**: See [Experiment ID Guide](../docs/20251003-experiment_id_guide.md)
 
 See [Testing Instructions](../docs/20251003-testing_instructions.md) for more help.
