@@ -88,6 +88,28 @@ log_narrative_result <- function(conn, experiment_id, result) {
     is_fn <- as.integer(!detected_bool && manual_bool)
   }
   
+  prompt_tokens <- if (is.null(result$prompt_tokens) || is.na(result$prompt_tokens)) {
+    NA_integer_
+  } else {
+    as.integer(result$prompt_tokens)
+  }
+  completion_tokens <- if (is.null(result$completion_tokens) || is.na(result$completion_tokens)) {
+    NA_integer_
+  } else {
+    as.integer(result$completion_tokens)
+  }
+  total_tokens <- if (is.null(result$tokens_used) || is.na(result$tokens_used)) {
+    NA_integer_
+  } else {
+    as.integer(result$tokens_used)
+  }
+  
+  incident_id_value <- if (is.null(result$incident_id) || is.na(result$incident_id)) {
+    NA_character_
+  } else {
+    as.character(result$incident_id)
+  }
+  
   DBI::dbExecute(conn,
     "INSERT INTO narrative_results (
       experiment_id, incident_id, narrative_type, row_num,
@@ -95,11 +117,12 @@ log_narrative_result <- function(conn, experiment_id, result) {
       detected, confidence, indicators, rationale, reasoning_steps,
       raw_response, response_sec, processed_at,
       error_occurred, error_message,
+      prompt_tokens, completion_tokens, tokens_used,
       is_true_positive, is_true_negative, is_false_positive, is_false_negative
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     params = list(
       experiment_id,
-      result$incident_id,
+      incident_id_value,
       result$narrative_type,
       result$row_num,
       result$narrative_text,
@@ -115,6 +138,9 @@ log_narrative_result <- function(conn, experiment_id, result) {
       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
       as.integer(result$parse_error),
       result$error_message,
+      prompt_tokens,
+      completion_tokens,
+      total_tokens,
       is_tp, is_tn, is_fp, is_fn
     )
   )
