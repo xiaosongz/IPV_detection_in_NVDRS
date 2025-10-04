@@ -1,0 +1,634 @@
+---
+title: "IPV Detection Experiment Quality Report"
+author: "Automated Analysis"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    code_folding: hide
+    theme: cosmo
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 10,
+  fig.height = 6,
+  dpi = 300
+)
+
+# Load required libraries
+library(DBI)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(knitr)
+
+# Read database credentials from .env
+env_file <- "../.env"
+if(file.exists(env_file)) {
+  env_vars <- readLines(env_file)
+  for(line in env_vars) {
+    if(grepl("^PG_", line)) {
+      parts <- strsplit(line, "=", fixed = TRUE)[[1]]
+      if(length(parts) == 2) {
+        env_name <- trimws(parts[1])
+        env_value <- trimws(parts[2])
+        do.call(Sys.setenv, setNames(list(env_value), env_name))
+      }
+    }
+  }
+}
+
+# Connect to PostgreSQL
+con <- NULL
+tryCatch({
+  # Try RPostgres first
+  if(requireNamespace("RPostgres", quietly = TRUE)) {
+    con <- DBI::dbConnect(
+      RPostgres::Postgres(),
+      host = Sys.getenv("PG_HOST", "memini.lan"),
+      port = as.integer(Sys.getenv("PG_PORT", "5433")),
+      dbname = Sys.getenv("PG_DATABASE", "postgres"),
+      user = Sys.getenv("PG_USER", "postgres"),
+      password = Sys.getenv("PG_PASSWORD", "k14I12d1")
+    )
+  }
+}, error = function(e) {
+  stop("Could not connect to PostgreSQL: ", e$message)
+})
+
+if(is.null(con)) {
+  stop("Database connection failed")
+}
+```
+
+# Executive Summary
+
+This report provides a comprehensive analysis of IPV (Intimate Partner Violence) detection experiments using Large Language Models (LLMs). The analysis examines prompt quality, model performance, and provides actionable recommendations for improving detection accuracy.
+
+```{r summary_stats, echo=FALSE}
+# Get basic statistics
+experiments <- dbGetQuery(con, "SELECT * FROM experiments")
+results <- dbGetQuery(con, "SELECT * FROM narrative_results")
+
+completed_exp <- experiments %>% filter(status == "completed")
+n_exp <- nrow(experiments)
+n_completed <- nrow(completed_exp)
+n_failed <- sum(experiments$status == "failed")
+n_running <- sum(experiments$status == "running")
+n_stalled <- sum(experiments$status == "stalled")
+
+cat(sprintf("- **Total Experiments**: %d\n", n_exp))
+cat(sprintf("- **Completed**: %d (%.1f%%)\n", n_completed, 100*n_completed/n_exp))
+cat(sprintf("- **Failed**: %d\n", n_failed))
+cat(sprintf("- **Running/Stalled**: %d\n", n_running + n_stalled))
+cat(sprintf("- **Total Narratives Processed**: %s\n", 
+            format(sum(completed_exp$n_narratives_processed, na.rm=TRUE), big.mark=",")))
+cat(sprintf("- **Average Accuracy**: %.1f%%\n", 
+            100*mean(completed_exp$accuracy, na.rm=TRUE)))
+cat(sprintf("- **Average F1 Score**: %.3f\n", 
+            mean(completed_exp$f1_ipv, na.rm=TRUE)))
+```
+
+---
+
+# 1. Experiment Overview
+
+## 1.1 Experiment Status Distribution
+
+```{r status_distribution}
+status_counts <- experiments %>%
+  group_by(status) %>%
+  summarise(
+    count = n(),
+    pct = n() / nrow(experiments) * 100
+  ) %>%
+  arrange(desc(count))
+
+kable(status_counts, 
+      col.names = c("Status", "Count", "Percentage"),
+      digits = 1,
+      caption = "Distribution of Experiment Status")
+```
+
+## 1.2 Model Distribution
+
+```{r model_distribution}
+model_counts <- experiments %>%
+  group_by(model_name) %>%
+  summarise(
+    experiments = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    avg_runtime_sec = mean(total_runtime_sec, na.rm = TRUE)
+  ) %>%
+  arrange(desc(experiments))
+
+kable(model_counts,
+      col.names = c("Model", "Experiments", "Avg Accuracy", "Avg F1", "Avg Runtime (s)"),
+      digits = 3,
+      caption = "Model Usage and Performance")
+```
+
+---
+
+# 2. Performance Analysis
+
+## 2.1 Overall Performance Metrics
+
+```{r overall_metrics}
+completed <- experiments %>% filter(status == "completed")
+
+metrics_summary <- completed %>%
+  summarise(
+    experiments = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    sd_accuracy = sd(accuracy, na.rm = TRUE),
+    avg_precision = mean(precision_ipv, na.rm = TRUE),
+    sd_precision = sd(precision_ipv, na.rm = TRUE),
+    avg_recall = mean(recall_ipv, na.rm = TRUE),
+    sd_recall = sd(recall_ipv, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE)
+  )
+
+metrics_long <- metrics_summary %>%
+  pivot_longer(-experiments, names_to = "metric", values_to = "value") %>%
+  mutate(
+    type = ifelse(grepl("^avg_", metric), "Mean", "SD"),
+    metric = gsub("^(avg_|sd_)", "", metric)
+  ) %>%
+  pivot_wider(names_from = type, values_from = value)
+
+kable(metrics_long,
+      col.names = c("N", "Metric", "Mean", "Std Dev"),
+      digits = 3,
+      caption = "Performance Metrics Summary (Completed Experiments)")
+```
+
+## 2.2 Confusion Matrix Analysis
+
+```{r confusion_matrix}
+confusion <- completed %>%
+  summarise(
+    true_positive = sum(n_true_positive, na.rm = TRUE),
+    true_negative = sum(n_true_negative, na.rm = TRUE),
+    false_positive = sum(n_false_positive, na.rm = TRUE),
+    false_negative = sum(n_false_negative, na.rm = TRUE)
+  )
+
+total <- sum(confusion)
+confusion_pct <- confusion / total * 100
+
+cat("### Aggregate Confusion Matrix\n\n")
+cat(sprintf("- **True Positives**: %d (%.1f%%)\n", 
+            confusion$true_positive, confusion_pct$true_positive))
+cat(sprintf("- **True Negatives**: %d (%.1f%%)\n", 
+            confusion$true_negative, confusion_pct$true_negative))
+cat(sprintf("- **False Positives**: %d (%.1f%%) - Model incorrectly flags non-IPV\n", 
+            confusion$false_positive, confusion_pct$false_positive))
+cat(sprintf("- **False Negatives**: %d (%.1f%%) - Model misses actual IPV\n", 
+            confusion$false_negative, confusion_pct$false_negative))
+
+cat("\n### Error Analysis\n\n")
+cat(sprintf("- **Total Errors**: %d (%.1f%% of predictions)\n",
+            confusion$false_positive + confusion$false_negative,
+            (confusion_pct$false_positive + confusion_pct$false_negative)))
+cat(sprintf("- **Precision Issue**: %.1f%% of positive predictions are wrong (FP)\n",
+            confusion$false_positive / (confusion$true_positive + confusion$false_positive) * 100))
+cat(sprintf("- **Recall Issue**: %.1f%% of actual IPV cases missed (FN)\n",
+            confusion$false_negative / (confusion$true_positive + confusion$false_negative) * 100))
+```
+
+---
+
+# 3. Prompt Quality Analysis
+
+## 3.1 Prompt Version Distribution
+
+```{r prompt_versions}
+prompt_summary <- completed %>%
+  group_by(prompt_version, prompt_author) %>%
+  summarise(
+    experiments = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    avg_precision = mean(precision_ipv, na.rm = TRUE),
+    avg_recall = mean(recall_ipv, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(experiments))
+
+kable(prompt_summary,
+      col.names = c("Version", "Author", "N", "Accuracy", "Precision", "Recall", "F1"),
+      digits = 3,
+      caption = "Performance by Prompt Version")
+```
+
+## 3.2 Prompt Template Analysis
+
+```{r prompt_analysis}
+# Analyze system prompts
+prompt_types <- completed %>%
+  mutate(
+    prompt_length = nchar(system_prompt),
+    has_examples = grepl("example|Example", system_prompt, ignore.case = TRUE),
+    has_definitions = grepl("definition|Definition|define", system_prompt, ignore.case = TRUE),
+    has_instructions = grepl("instruction|Instruction|step", system_prompt, ignore.case = TRUE),
+    mentions_indicators = grepl("indicator|sign|evidence", system_prompt, ignore.case = TRUE)
+  )
+
+prompt_features <- prompt_types %>%
+  group_by(has_examples, has_definitions, has_instructions, mentions_indicators) %>%
+  summarise(
+    count = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(count > 1) %>%
+  arrange(desc(avg_f1))
+
+cat("### Prompt Characteristics Analysis\n\n")
+cat(sprintf("- **Average Prompt Length**: %d characters\n", 
+            round(mean(prompt_types$prompt_length))))
+cat(sprintf("- **Prompts with Examples**: %.1f%%\n", 
+            100 * mean(prompt_types$has_examples)))
+cat(sprintf("- **Prompts with Definitions**: %.1f%%\n", 
+            100 * mean(prompt_types$has_definitions)))
+cat(sprintf("- **Prompts with Instructions**: %.1f%%\n", 
+            100 * mean(prompt_types$has_instructions)))
+cat(sprintf("- **Prompts Mentioning Indicators**: %.1f%%\n", 
+            100 * mean(prompt_types$mentions_indicators)))
+```
+
+---
+
+# 4. Temperature and Configuration Analysis
+
+## 4.1 Temperature Impact
+
+```{r temperature_analysis}
+temp_analysis <- completed %>%
+  mutate(temp_bucket = cut(temperature, 
+                           breaks = c(-0.1, 0.1, 0.5, 1.0, 2.0),
+                           labels = c("0.0", "0.1-0.5", "0.6-1.0", "1.0+"))) %>%
+  group_by(temp_bucket) %>%
+  summarise(
+    experiments = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    avg_precision = mean(precision_ipv, na.rm = TRUE),
+    avg_recall = mean(recall_ipv, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(temp_bucket)
+
+kable(temp_analysis,
+      col.names = c("Temperature", "N", "Accuracy", "Precision", "Recall", "F1"),
+      digits = 3,
+      caption = "Performance by Temperature Setting")
+```
+
+## 4.2 Model Parameters
+
+```{r model_params}
+params <- completed %>%
+  group_by(model_name, temperature) %>%
+  summarise(
+    experiments = n(),
+    avg_accuracy = mean(accuracy, na.rm = TRUE),
+    avg_f1 = mean(f1_ipv, na.rm = TRUE),
+    avg_time_per_narrative = mean(avg_time_per_narrative_sec, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(model_name, temperature)
+
+kable(params,
+      col.names = c("Model", "Temperature", "N", "Accuracy", "F1", "Avg Time/Narrative (s)"),
+      digits = 3,
+      caption = "Model Configuration Performance")
+```
+
+---
+
+# 5. Efficiency Analysis
+
+## 5.1 Runtime Analysis
+
+```{r runtime_analysis}
+runtime_stats <- completed %>%
+  summarise(
+    total_runtime_hours = sum(total_runtime_sec, na.rm = TRUE) / 3600,
+    avg_runtime_minutes = mean(total_runtime_sec, na.rm = TRUE) / 60,
+    avg_time_per_narrative = mean(avg_time_per_narrative_sec, na.rm = TRUE),
+    min_time_per_narrative = min(avg_time_per_narrative_sec, na.rm = TRUE),
+    max_time_per_narrative = max(avg_time_per_narrative_sec, na.rm = TRUE)
+  )
+
+cat("### Runtime Statistics\n\n")
+cat(sprintf("- **Total Compute Time**: %.1f hours\n", 
+            runtime_stats$total_runtime_hours))
+cat(sprintf("- **Average Experiment Duration**: %.1f minutes\n", 
+            runtime_stats$avg_runtime_minutes))
+cat(sprintf("- **Average Time per Narrative**: %.2f seconds\n", 
+            runtime_stats$avg_time_per_narrative))
+cat(sprintf("- **Range**: %.2f - %.2f seconds per narrative\n",
+            runtime_stats$min_time_per_narrative,
+            runtime_stats$max_time_per_narrative))
+```
+
+## 5.2 Token Usage Analysis
+
+```{r token_analysis}
+if("tokens_used" %in% names(results)) {
+  token_stats <- results %>%
+    filter(!is.na(tokens_used)) %>%
+    summarise(
+      total_tokens = sum(tokens_used, na.rm = TRUE),
+      avg_tokens_per_narrative = mean(tokens_used, na.rm = TRUE),
+      avg_prompt_tokens = mean(prompt_tokens, na.rm = TRUE),
+      avg_completion_tokens = mean(completion_tokens, na.rm = TRUE)
+    )
+  
+  cat("### Token Usage\n\n")
+  cat(sprintf("- **Total Tokens Used**: %s\n", 
+              format(token_stats$total_tokens, big.mark = ",")))
+  cat(sprintf("- **Average Tokens per Narrative**: %.0f\n", 
+              token_stats$avg_tokens_per_narrative))
+  cat(sprintf("- **Average Prompt Tokens**: %.0f\n", 
+              token_stats$avg_prompt_tokens))
+  cat(sprintf("- **Average Completion Tokens**: %.0f\n", 
+              token_stats$avg_completion_tokens))
+}
+```
+
+---
+
+# 6. Error Pattern Analysis
+
+## 6.1 Top Performing Experiments
+
+```{r top_performers}
+top_exp <- completed %>%
+  arrange(desc(f1_ipv)) %>%
+  head(5) %>%
+  select(experiment_name, model_name, temperature, prompt_version, 
+         accuracy, precision_ipv, recall_ipv, f1_ipv)
+
+kable(top_exp,
+      col.names = c("Experiment", "Model", "Temp", "Prompt Ver", 
+                    "Accuracy", "Precision", "Recall", "F1"),
+      digits = 3,
+      caption = "Top 5 Experiments by F1 Score")
+```
+
+## 6.2 Problematic Experiments
+
+```{r problem_experiments}
+problem_exp <- completed %>%
+  arrange(f1_ipv) %>%
+  head(5) %>%
+  select(experiment_name, model_name, temperature, prompt_version,
+         accuracy, precision_ipv, recall_ipv, f1_ipv,
+         n_false_positive, n_false_negative)
+
+kable(problem_exp,
+      col.names = c("Experiment", "Model", "Temp", "Prompt Ver",
+                    "Accuracy", "Precision", "Recall", "F1", "FP", "FN"),
+      digits = 3,
+      caption = "Bottom 5 Experiments by F1 Score")
+```
+
+---
+
+# 7. Recommendations
+
+## 7.1 Prompt Engineering Recommendations
+
+```{r prompt_recommendations}
+best_prompt <- completed %>%
+  arrange(desc(f1_ipv)) %>%
+  head(1)
+
+cat("### Best Performing Configuration\n\n")
+cat(sprintf("- **Model**: %s\n", best_prompt$model_name))
+cat(sprintf("- **Temperature**: %.2f\n", best_prompt$temperature))
+cat(sprintf("- **Prompt Version**: %s\n", best_prompt$prompt_version))
+cat(sprintf("- **F1 Score**: %.3f\n", best_prompt$f1_ipv))
+cat(sprintf("- **Accuracy**: %.3f\n", best_prompt$accuracy))
+
+cat("\n### Recommendations Based on Analysis\n\n")
+
+# Temperature recommendation
+best_temp_range <- temp_analysis %>% 
+  arrange(desc(avg_f1)) %>% 
+  head(1)
+cat(sprintf("1. **Optimal Temperature Range**: %s (F1: %.3f)\n", 
+            best_temp_range$temp_bucket, best_temp_range$avg_f1))
+
+# Prompt features
+if(exists("prompt_features") && nrow(prompt_features) > 0) {
+  best_features <- prompt_features %>% arrange(desc(avg_f1)) %>% head(1)
+  cat("\n2. **Effective Prompt Features**:\n")
+  if(best_features$has_examples) cat("   - Include examples\n")
+  if(best_features$has_definitions) cat("   - Provide clear definitions\n")
+  if(best_features$has_instructions) cat("   - Give step-by-step instructions\n")
+  if(best_features$mentions_indicators) cat("   - Specify indicators to look for\n")
+}
+
+# Error pattern recommendations
+cat("\n3. **Addressing Common Errors**:\n")
+if(confusion$false_positive > confusion$false_negative) {
+  cat("   - **High False Positive Rate**: Model is too aggressive\n")
+  cat("     → Recommendation: Add more specific IPV criteria\n")
+  cat("     → Consider increasing decision threshold\n")
+} else if(confusion$false_negative > confusion$false_positive) {
+  cat("   - **High False Negative Rate**: Model is too conservative\n")
+  cat("     → Recommendation: Expand IPV indicator examples\n")
+  cat("     → Consider lowering decision threshold\n")
+}
+
+cat("\n4. **Efficiency Improvements**:\n")
+fastest_accurate <- completed %>%
+  filter(f1_ipv > 0.65) %>%
+  arrange(avg_time_per_narrative_sec) %>%
+  head(1)
+if(nrow(fastest_accurate) > 0) {
+  cat(sprintf("   - Fastest accurate config: %s at temp %.2f\n",
+              fastest_accurate$model_name,
+              fastest_accurate$temperature))
+  cat(sprintf("   - Time: %.2f sec/narrative, F1: %.3f\n",
+              fastest_accurate$avg_time_per_narrative_sec,
+              fastest_accurate$f1_ipv))
+}
+```
+
+## 7.2 Future Experiment Suggestions
+
+```{r future_experiments}
+cat("### Recommended Next Experiments\n\n")
+
+# Find gaps in tested configurations
+tested_temps <- unique(completed$temperature)
+cat("1. **Temperature Exploration**:\n")
+cat("   - Currently tested:", paste(sort(tested_temps), collapse = ", "), "\n")
+if(!0.3 %in% tested_temps) cat("   - Try: 0.3 (may balance creativity and consistency)\n")
+if(!0.7 %in% tested_temps) cat("   - Try: 0.7 (upper range of deterministic)\n")
+
+cat("\n2. **Prompt Variations to Test**:\n")
+cat("   - A/B test with and without examples\n")
+cat("   - Test different instruction formats (imperative vs. question)\n")
+cat("   - Vary the order of information presentation\n")
+
+cat("\n3. **Model Comparison**:\n")
+tested_models <- unique(completed$model_name)
+cat("   - Current models:", length(tested_models), "\n")
+if(length(tested_models) == 1) {
+  cat("   - Recommendation: Test at least 2-3 different model architectures\n")
+}
+
+cat("\n4. **Validation Experiments**:\n")
+cat("   - Run best configuration multiple times (seed variation)\n")
+cat("   - Test on different data subsets\n")
+cat("   - Cross-validate with manual annotations\n")
+```
+
+---
+
+# 8. Data Quality Assessment
+
+## 8.1 Experiment Completeness
+
+```{r data_quality}
+quality_check <- experiments %>%
+  summarise(
+    total = n(),
+    has_metrics = sum(!is.na(accuracy)),
+    has_confusion = sum(!is.na(n_true_positive)),
+    has_runtime = sum(!is.na(total_runtime_sec)),
+    completeness_rate = mean(!is.na(accuracy)) * 100
+  )
+
+cat("### Data Completeness\n\n")
+cat(sprintf("- **Experiments with Metrics**: %d/%d (%.1f%%)\n",
+            quality_check$has_metrics, quality_check$total,
+            100 * quality_check$has_metrics / quality_check$total))
+cat(sprintf("- **Experiments with Confusion Matrix**: %d/%d\n",
+            quality_check$has_confusion, quality_check$total))
+cat(sprintf("- **Experiments with Runtime Data**: %d/%d\n",
+            quality_check$has_runtime, quality_check$total))
+```
+
+## 8.2 Issues and Warnings
+
+```{r warnings}
+cat("### Potential Issues\n\n")
+
+# Check for failed experiments
+if(n_failed > 0) {
+  cat(sprintf("⚠️  **%d Failed Experiments** - Review error logs\n", n_failed))
+}
+
+# Check for stalled experiments
+if(n_stalled > 0) {
+  cat(sprintf("⚠️  **%d Stalled Experiments** - May need manual intervention\n", n_stalled))
+}
+
+# Check for running experiments
+if(n_running > 0) {
+  cat(sprintf("ℹ️  **%d Running Experiments** - Wait for completion\n", n_running))
+}
+
+# Check for outliers
+if(nrow(completed) > 3) {
+  accuracy_outliers <- completed %>%
+    filter(accuracy < (mean(accuracy, na.rm=TRUE) - 2*sd(accuracy, na.rm=TRUE)) |
+           accuracy > (mean(accuracy, na.rm=TRUE) + 2*sd(accuracy, na.rm=TRUE)))
+  
+  if(nrow(accuracy_outliers) > 0) {
+    cat(sprintf("\n⚠️  **%d Accuracy Outliers** - Review these experiments:\n", 
+                nrow(accuracy_outliers)))
+    for(i in 1:min(3, nrow(accuracy_outliers))) {
+      cat(sprintf("   - %s: Accuracy %.3f\n", 
+                  accuracy_outliers$experiment_name[i],
+                  accuracy_outliers$accuracy[i]))
+    }
+  }
+}
+```
+
+---
+
+# 9. Conclusion
+
+```{r conclusion}
+cat("## Key Findings\n\n")
+
+# Overall performance
+avg_f1 <- mean(completed$f1_ipv, na.rm = TRUE)
+if(avg_f1 > 0.75) {
+  cat("✅ **Strong Performance**: Average F1 score indicates good IPV detection capability\n\n")
+} else if(avg_f1 > 0.6) {
+  cat("⚠️  **Moderate Performance**: Reasonable but room for improvement\n\n")
+} else {
+  cat("❌ **Needs Improvement**: F1 score suggests significant optimization needed\n\n")
+}
+
+# Consistency
+f1_sd <- sd(completed$f1_ipv, na.rm = TRUE)
+if(f1_sd < 0.05) {
+  cat("✅ **High Consistency**: Low variation across experiments\n\n")
+} else if(f1_sd < 0.15) {
+  cat("⚠️  **Moderate Consistency**: Some variation in results\n\n")
+} else {
+  cat("❌ **High Variation**: Results vary significantly - investigate causes\n\n")
+}
+
+# Error balance
+fp_rate <- confusion$false_positive / (confusion$true_positive + confusion$false_positive)
+fn_rate <- confusion$false_negative / (confusion$true_positive + confusion$false_negative)
+if(abs(fp_rate - fn_rate) < 0.1) {
+  cat("✅ **Balanced Errors**: False positives and negatives are similar\n\n")
+} else if(fp_rate > fn_rate) {
+  cat("⚠️  **Over-detection**: Model tends to over-flag IPV cases\n\n")
+} else {
+  cat("⚠️  **Under-detection**: Model tends to miss IPV cases\n\n")
+}
+
+cat("## Next Steps\n\n")
+cat("1. Implement top recommendations from Section 7\n")
+cat("2. Address any data quality issues from Section 8\n")
+cat("3. Run validation experiments to confirm findings\n")
+cat("4. Document best practices for future experiments\n")
+cat("5. Consider ensemble approaches using multiple configurations\n")
+```
+
+---
+
+# Appendix: Database Connection Info
+
+```{r connection_info, echo=FALSE}
+cat("- **Database**: PostgreSQL\n")
+cat("- **Host**:", Sys.getenv("PG_HOST", "unknown"), "\n")
+cat("- **Port**:", Sys.getenv("PG_PORT", "unknown"), "\n")
+cat("- **Database Name**:", Sys.getenv("PG_DATABASE", "unknown"), "\n")
+cat("- **Report Generated**:", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"), "\n")
+```
+
+```{r cleanup, include=FALSE}
+# Close database connection
+if(!is.null(con)) {
+  dbDisconnect(con)
+}
+```
+
+---
+
+*This report was automatically generated from PostgreSQL experiment data. For questions or issues, review the source data in the experiments and narrative_results tables.*
