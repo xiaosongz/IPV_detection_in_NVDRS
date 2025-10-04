@@ -114,6 +114,18 @@ response <- call_llm(messages)
 result <- parse_llm_result(response)  # Just works!
 ```
 
+**Important**: When sourcing files manually, `repair_json.R` must be loaded BEFORE `parse_llm_result.R`:
+
+```r
+source("R/call_llm.R")
+source("R/repair_json.R")      # Load repair_json first
+source("R/parse_llm_result.R")  # Then parse_llm_result
+```
+
+This is already configured correctly in:
+- `scripts/run_experiment.R`
+- All example files in `examples/`
+
 ## Philosophy
 
 Following the project's "fail fast, graceful degradation" principle:
