@@ -33,6 +33,16 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
   # Load Excel file
   cat("Loading data from:", excel_path, "\n")
   data <- readxl::read_excel(excel_path)
+
+  # Ensure incident IDs are treated as character strings
+  data <- dplyr::mutate(
+    data,
+    IncidentID = dplyr::if_else(
+      is.na(IncidentID),
+      NA_character_,
+      as.character(IncidentID)
+    )
+  )
   
   # Transform to long format (avoid %>% pipe issues)
   data_long <- tidyr::pivot_longer(
@@ -60,8 +70,16 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
     manual_flag_ind,
     manual_flag
   )
-  
+
   data_long <- dplyr::filter(data_long, !is.na(narrative_text), trimws(narrative_text) != "")
+  data_long <- dplyr::mutate(
+    data_long,
+    incident_id = dplyr::if_else(
+      is.na(incident_id),
+      NA_character_,
+      as.character(incident_id)
+    )
+  )
   
   # Insert into database
   data_long$data_source <- excel_path

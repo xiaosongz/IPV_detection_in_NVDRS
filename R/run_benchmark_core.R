@@ -53,7 +53,11 @@ run_benchmark_core <- function(config, conn, experiment_id, narratives, logger) 
     
     # Add metadata
     result$row_num <- i
-    result$incident_id <- narrative$incident_id
+    result$incident_id <- if (is.na(narrative$incident_id)) {
+      NA_character_
+    } else {
+      as.character(narrative$incident_id)
+    }
     result$narrative_type <- narrative$narrative_type
     result$narrative_text <- narrative$narrative_text
     result$manual_flag_ind <- narrative$manual_flag_ind

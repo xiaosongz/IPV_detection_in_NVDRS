@@ -119,6 +119,9 @@ init_experiment_db <- function(db_path = NULL) {
       processed_at TEXT,
       error_occurred INTEGER DEFAULT 0,
       error_message TEXT,
+      prompt_tokens INTEGER,
+      completion_tokens INTEGER,
+      tokens_used INTEGER,
       is_true_positive INTEGER,
       is_true_negative INTEGER,
       is_false_positive INTEGER,
@@ -135,7 +138,10 @@ init_experiment_db <- function(db_path = NULL) {
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_error ON narrative_results(error_occurred)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_false_positive ON narrative_results(is_false_positive)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_false_negative ON narrative_results(is_false_negative)")
-  
+  DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_exp_tokens ON narrative_results(experiment_id, tokens_used)")
+
+  ensure_token_columns(conn)
+
   return(conn)
 }
 
@@ -156,6 +162,26 @@ get_db_connection <- function(db_path = NULL) {
   
   conn <- DBI::dbConnect(RSQLite::SQLite(), db_path)
   DBI::dbExecute(conn, "PRAGMA foreign_keys = ON")
+  ensure_token_columns(conn)
   
   return(conn)
+}
+
+#' Ensure token columns exist on legacy databases
+#'
+#' Adds prompt/completion/total token columns if missing (for pre-upgrade DBs).
+#'
+#' @param conn DBI connection
+ensure_token_columns <- function(conn) {
+  existing_cols <- DBI::dbGetQuery(conn, "PRAGMA table_info(narrative_results)")
+
+  add_if_missing <- function(column_name, sql) {
+    if (!column_name %in% existing_cols$name) {
+      DBI::dbExecute(conn, sql)
+    }
+  }
+
+  add_if_missing("prompt_tokens", "ALTER TABLE narrative_results ADD COLUMN prompt_tokens INTEGER")
+  add_if_missing("completion_tokens", "ALTER TABLE narrative_results ADD COLUMN completion_tokens INTEGER")
+  add_if_missing("tokens_used", "ALTER TABLE narrative_results ADD COLUMN tokens_used INTEGER")
 }

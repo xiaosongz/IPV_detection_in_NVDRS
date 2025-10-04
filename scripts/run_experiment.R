@@ -179,6 +179,13 @@ tryCatch({
             total_runtime_sec
      FROM experiments WHERE experiment_id = ?",
     params = list(experiment_id))
+  token_stats <- DBI::dbGetQuery(conn,
+    "SELECT
+        MAX(tokens_used) AS max_tokens,
+        AVG(tokens_used) AS avg_tokens
+     FROM narrative_results
+     WHERE experiment_id = ? AND tokens_used IS NOT NULL AND error_occurred = 0",
+    params = list(experiment_id))
   
   cat("Experiment:", exp_info$experiment_name, "\n")
   cat("Model:", exp_info$model_name, "(temperature =", exp_info$temperature, ")\n")
@@ -195,6 +202,14 @@ tryCatch({
   cat("  False Positives: ", exp_info$n_false_positive, "\n")
   cat("  True Negatives:  ", exp_info$n_true_negative, "\n")
   cat("  False Negatives: ", exp_info$n_false_negative, "\n\n")
+  if (!is.na(token_stats$max_tokens)) {
+    cat("Token Usage:\n")
+    cat("  Max tokens (single narrative): ", token_stats$max_tokens, "\n", sep = "")
+    if (!is.na(token_stats$avg_tokens)) {
+      cat("  Avg tokens (processed narratives): ", sprintf("%.0f", token_stats$avg_tokens), "\n", sep = "")
+    }
+    cat("\n")
+  }
   
   cat("Runtime:", sprintf("%.1f", exp_info$total_runtime_sec), "seconds\n")
   cat("Average per narrative:", sprintf("%.2f", exp_info$total_runtime_sec / exp_info$n_narratives_processed), "seconds\n\n")
