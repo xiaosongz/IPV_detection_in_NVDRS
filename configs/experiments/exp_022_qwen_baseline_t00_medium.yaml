@@ -1,18 +1,18 @@
 experiment:
-  name: "Indirect Indicators (T=0.0, Reasoning=High)"
-  author: "Xiaosong"
-  notes: "v0.3.2 with indirect IPV indicators (shelter, police, restraining orders), temp=0.0, reasoning=high"
+  name: "Baseline + Victim Check (T=0.0, Reasoning=Medium) - Qwen3-80B"
+  author: "gemini"
+  notes: "Replication of exp-007 with qwen3-next-80b-a3b-thinking-mlx"
 
 model:
-  name: "mlx-community/gpt-oss-120b"
+  name: "qwen3-next-80b-a3b-thinking-mlx"
   provider: "mlx"
   api_url: "http://localhost:1234/v1/chat/completions"
   temperature: 0.0
 
 prompt:
-  version: "v0.3.2_indicators"
+  version: "v0.3.1_baseline"
   system_prompt: |
-    Reasoning: high
+    Reasoning: medium
 
     ROLE: You are an expert trained to detect if the deceased was a victim of intimate partner violence (IPV) from law enforcement and medical examiner reports following a suicide.
 
@@ -26,24 +26,19 @@ prompt:
     5. ECONOMIC ABUSE: control access to money, control access to means of transportation, control whether victimized partner goes to work/school, ruins credit, spends or gambles victimized partners money
     6. LEGAL ABUSE: threat to call police on victimized partner, use court system against victimized partner (i.e. custody change), threaten to call child services, immigration or other governmental agencies
 
-    INDIRECT IPV INDICATORS (Strong Evidence):
-    - Women's shelter stay (e.g., Family Violence Project) → AUTOMATIC IPV
-    - Police separation/intervention in partner relationship → HIGH IPV probability
-    - Restraining order against partner → HIGH IPV probability
-    - "Domestic issues" or "domestic violence" mentioned → Likely IPV
-    - Partner arrested for DV → HIGH IPV probability
-
-    VICTIM ROLE CHECK:
-    - Deceased must be IPV victim, not perpetrator
-    - Homicide victim (not suicide) = NOT IPV for this study
+    CRITICAL VICTIM ROLE CHECK:
+    - The deceased must be the VICTIM of IPV (not the perpetrator)
+    - Suicide after being IPV victim = IPV ✓
+    - Suicide after committing violence against partner = NOT IPV ✗
+    - Homicide victim (killed by partner, then partner suicide) = NOT IPV ✗
 
   user_template: |
     TASK: Determine if the deceased was a victim of IPV.
 
-    Step 1: Check for INDIRECT indicators (shelter, police intervention, restraining orders, domestic issues)
-    Step 2: Identify deceased's role (victim vs perpetrator)
-    Step 3: Check for intimate partner relationship
-    Step 4: Identify explicit abusive behaviors
+    Step 1: Identify the deceased's role - were they abused BY their partner, or did they abuse their partner?
+    Step 2: Check for intimate partner relationship (current/former partner, spouse, boyfriend/girlfriend, ex, father of children)
+    Step 3: Identify abusive behaviors matching IPV definitions
+    Step 4: Mark TRUE if victim was in women's shelter (e.g., Family Violence Project)
     Step 5: Final determination
 
     Narrative: <<TEXT>>

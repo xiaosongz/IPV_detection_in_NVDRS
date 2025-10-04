@@ -47,11 +47,20 @@ prompt:
 
     Also mark "TRUE" if victim was ever in a women's shelter (e.g., Family Violence Project).
 
-    Return ONLY this JSON:
+    Return valid JSON (examples):
+    {"detected": true, "confidence": 0.85, "indicators": ["domestic violence history"], "rationale": "..."}
+    {"detected": false, "confidence": 0.9, "indicators": [], "rationale": "..."}
+
+    Rules:
+    - confidence must be a number: 0.9, 0.75, 0.85
+    - Never spell out: "0. nine" is INVALID
+
+    Required format:
     {
       "detected": true/false,
       "confidence": 0.00-1.00,
-      "rationale": "200 char fact-based explanation"
+      "indicators": ["exact tokens from vocab list"],
+      "rationale": "≤200 char fact-based explanation"
     }
 
 data:

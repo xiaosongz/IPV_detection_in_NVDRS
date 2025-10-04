@@ -1,7 +1,7 @@
 experiment:
-  name: "Indirect Indicators (T=0.0, Reasoning=High)"
-  author: "Xiaosong"
-  notes: "v0.3.2 with indirect IPV indicators (shelter, police, restraining orders), temp=0.0, reasoning=high"
+  name: "Full Context v0.4.4 (T=0.0, Medium)"
+  author: "gemini"
+  notes: "Replication of exp-016 with improved JSON formatting in prompt (v0.4.4)"
 
 model:
   name: "mlx-community/gpt-oss-120b"
@@ -10,9 +10,9 @@ model:
   temperature: 0.0
 
 prompt:
-  version: "v0.3.2_indicators"
+  version: "v0.4.4_context"
   system_prompt: |
-    Reasoning: high
+    Reasoning: medium
 
     ROLE: You are an expert trained to detect if the deceased was a victim of intimate partner violence (IPV) from law enforcement and medical examiner reports following a suicide.
 
@@ -33,36 +33,48 @@ prompt:
     - "Domestic issues" or "domestic violence" mentioned → Likely IPV
     - Partner arrested for DV → HIGH IPV probability
 
-    VICTIM ROLE CHECK:
-    - Deceased must be IPV victim, not perpetrator
+    EXCLUSION CRITERIA (NOT IPV):
+    - Deceased initiated violence AND partner restrained/defended = Self-defense, NOT IPV
+    - Mutual combat (both violent, no clear victim) = NOT IPV
+    - Deceased was perpetrator, not victim = NOT IPV
     - Homicide victim (not suicide) = NOT IPV for this study
+    - Breakups, arguments, sadness alone = NOT IPV
+
+    CRITICAL CHECKS:
+    - Deceased must be suicide victim (self-inflicted death)
+    - Deceased must be IPV victim (abused BY partner)
+    - Require explicit evidence or strong indirect indicators
+    - When uncertain, default to FALSE
 
   user_template: |
-    TASK: Determine if the deceased was a victim of IPV.
+    TASK: Comprehensive IPV assessment with full context.
 
-    Step 1: Check for INDIRECT indicators (shelter, police intervention, restraining orders, domestic issues)
-    Step 2: Identify deceased's role (victim vs perpetrator)
-    Step 3: Check for intimate partner relationship
-    Step 4: Identify explicit abusive behaviors
-    Step 5: Final determination
+    Step 1: Confirm this is a suicide (self-inflicted), not homicide
+    Step 2: Check INDIRECT indicators first (shelter, police, restraining orders, domestic issues)
+    Step 3: Identify who was the aggressor/victim
+    Step 4: If deceased attacked partner → check if partner's response was self-defense
+    Step 5: Look for explicit abuse BY partner AGAINST deceased
+    Step 6: Final determination (when uncertain → FALSE)
 
     Narrative: <<TEXT>>
 
-    Return valid JSON (examples):
-    {"detected": true, "confidence": 0.85, "indicators": ["domestic violence history"], "rationale": "..."}
-    {"detected": false, "confidence": 0.9, "indicators": [], "rationale": "..."}
-
-    Rules:
-    - confidence must be a number: 0.9, 0.75, 0.85
-    - Never spell out: "0. nine" is INVALID
-
-    Required format:
+    Return this EXACT JSON structure:
     {
-      "detected": true/false,
-      "confidence": 0.00-1.00,
-      "indicators": ["exact tokens from vocab list"],
-      "rationale": "≤200 char fact-based explanation"
+      "detected": <boolean>,          // true or false
+      "confidence": <number>,          // decimal 0.0 to 1.0, e.g., 0.85
+      "rationale": <string>            // max 200 characters
     }
+
+    Valid confidence examples:
+    - "confidence": 0.9   ✓
+    - "confidence": 0.75  ✓
+    - "confidence": 0.85  ✓
+
+    Invalid (DO NOT USE):
+    - "confidence": 0. nine  ✗ (never spell numbers)
+    - "confidence": "0.9"    ✗ (must be number, not string)
+
+    Your response must be valid JSON parseable by JSON.parse()
 
 data:
   file: "data-raw/suicide_IPV_manuallyflagged.xlsx"

@@ -1,0 +1,124 @@
+experiment:
+  name: "CoT v0.4.5 (T=0.0, High)"
+  author: "gemini"
+  notes: "Replication of exp-020 with improved JSON formatting in prompt (v0.4.5)"
+
+model:
+  name: "mlx-community/gpt-oss-120b"
+  provider: "mlx"
+  api_url: "http://localhost:1234/v1/chat/completions"
+  temperature: 0.0
+
+prompt:
+  version: "v0.4.5_cot"
+  system_prompt: |
+    Reasoning: high
+
+    ROLE: You are an expert trained to detect if the deceased was a victim of intimate partner violence (IPV) from law enforcement and medical examiner reports following a suicide.
+
+    DEFINITION: IPV occurs only when the abusive behavior listed below is committed by a current or former intimate partner, boyfriend, girlfriend, spouse, or ex, or father of victim's children.
+
+    TYPES OF IPV ABUSE:
+    1. PHYSICAL ABUSE: hitting, slapping, pushing, choking, biting, pulling hair, poisoning, giving incorrect doses of meds, strangulation, beating
+    2. SEXUAL ABUSE: forcible rape, coerced sex, sexual exploitation, refusal to use protection, forced pregnancy/abortion
+    3. PSYCHOLOGICAL ABUSE: verbal threats, stalking, intimidation, jealousy, control, restricting phone use
+    4. EMOTIONAL ABUSE: gaslighting, lying, isolation, humiliation
+    5. ECONOMIC ABUSE: control access to money, transportation, or work
+    6. LEGAL ABUSE: threat to call police, false reports, custody threats
+
+    INDIRECT IPV INDICATORS (Strong Evidence):
+    - Women's shelter stay (e.g., Family Violence Project) -> AUTOMATIC IPV
+    - Police separation/intervention in partner relationship -> HIGH IPV probability
+    - Restraining order against partner -> HIGH IPV probability
+    - "Domestic issues" or "domestic violence" mentioned -> Likely IPV
+
+    EXCLUSION CRITERIA (NOT IPV):
+    - Deceased initiated violence AND partner restrained/defended = Self-defense, NOT IPV
+    - Mutual combat (both violent, no clear victim) = NOT IPV
+    - Deceased was perpetrator, not victim = NOT IPV
+    - Homicide victim (not suicide) = NOT IPV for this study
+    - Breakups, arguments, sadness alone = NOT IPV
+
+    CRITICAL CHECKS:
+    - Deceased must be suicide victim (self-inflicted death)
+    - Deceased must be IPV victim (abused BY partner)
+    - Require explicit evidence or strong indirect indicators
+    - When uncertain, default to FALSE
+
+    EXAMPLES OF CORRECT REASONING:
+    ---
+    **Example 1: Handling Ambiguous but Present IPV (A case we want to catch)**
+
+    Narrative: "Deceased and her boyfriend had a verbal argument the night before her death. Her friend reported that the deceased seemed withdrawn lately and had mentioned her boyfriend was 'very controlling' and was checking her phone messages. No physical marks were noted."
+
+    Correct Reasoning & Output:
+    <thinking>
+    1.  Intimate Partner: A "boyfriend" is mentioned.
+    2.  Behaviors: No explicit physical abuse. However, two psychological abuse indicators are present: "controlling" behavior and "checking her phone messages".
+    3.  Analysis: These two indicators form a pattern of psychological abuse consistent with the IPV definition.
+    4.  Conclusion: Despite the lack of physical evidence, the pattern of psychological control is sufficient for a 'true' detection.
+    </thinking>
+    {
+      "detected": true,
+      "confidence": 0.65,
+      "rationale": "Detected based on a pattern of psychological abuse including controlling behavior and monitoring phone."
+    }
+    ---
+    **Example 2: Correctly Excluding Non-IPV Conflict (A case we want to avoid)**
+
+    Narrative: "The deceased and his wife were going through a contentious divorce and arguing over assets. The wife's lawyer had sent a letter regarding the division of their house. The deceased was very distressed about losing the house."
+
+    Correct Reasoning & Output:
+    <thinking>
+    1.  Intimate Partner: A "wife" is mentioned.
+    2.  Behaviors: "contentious divorce" and "arguing over assets".
+    3.  Analysis: These behaviors do not match the specific definitions of IPV abuse. A standard divorce proceeding, even if stressful, is not IPV.
+    4.  Conclusion: IPV is not detected.
+    </thinking>
+    {
+      "detected": false,
+      "confidence": 0.10,
+      "rationale": "No evidence of specific abusive behaviors as defined; describes a contentious divorce proceeding, not IPV."
+    }
+    ---
+
+  user_template: |
+    TASK: Analyze the following narrative for IPV using the provided definitions, criteria, and examples.
+
+    Narrative: <<TEXT>>
+
+    First, think step-by-step inside <thinking> tags, following the examples. Then, provide your final JSON output.
+
+    <thinking>
+    1.  Intimate Partner: [Is an intimate partner mentioned? Who?]
+    2.  Behaviors: [List any described behaviors, direct or indirect.]
+    3.  Analysis: [Do these behaviors match the IPV definitions or exclusion criteria? Reference the examples if needed.]
+    4.  Conclusion: [State your final conclusion based on the analysis.]
+    </thinking>
+
+    Return this EXACT JSON structure:
+    {
+      "detected": <boolean>,          // true or false
+      "confidence": <number>,          // decimal 0.0 to 1.0, e.g., 0.85
+      "rationale": <string>            // max 200 characters
+    }
+
+    Valid confidence examples:
+    - "confidence": 0.9   ✓
+    - "confidence": 0.75  ✓
+    - "confidence": 0.85  ✓
+
+    Invalid (DO NOT USE):
+    - "confidence": 0. nine  ✗ (never spell numbers)
+    - "confidence": "0.9"    ✗ (must be number, not string)
+
+    Your response must be valid JSON parseable by JSON.parse()
+
+data:
+  file: "data-raw/suicide_IPV_manuallyflagged.xlsx"
+
+run:
+  seed: 1024
+  max_narratives: 1000000
+  save_incremental: true
+  save_csv_json: true

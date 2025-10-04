@@ -1,16 +1,16 @@
 experiment:
-  name: "Indirect Indicators (T=0.0, Reasoning=High)"
-  author: "Xiaosong"
-  notes: "v0.3.2 with indirect IPV indicators (shelter, police, restraining orders), temp=0.0, reasoning=high"
+  name: "Strict Criteria + Self-Defense (T=0.2, Reasoning=High) - Qwen3-80B"
+  author: "gemini"
+  notes: "Replication of exp-015 with qwen3-next-80b-a3b-thinking-mlx"
 
 model:
-  name: "mlx-community/gpt-oss-120b"
+  name: "qwen3-next-80b-a3b-thinking-mlx"
   provider: "mlx"
   api_url: "http://localhost:1234/v1/chat/completions"
-  temperature: 0.0
+  temperature: 0.2
 
 prompt:
-  version: "v0.3.2_indicators"
+  version: "v0.3.3_strict"
   system_prompt: |
     Reasoning: high
 
@@ -26,25 +26,27 @@ prompt:
     5. ECONOMIC ABUSE: control access to money, control access to means of transportation, control whether victimized partner goes to work/school, ruins credit, spends or gambles victimized partners money
     6. LEGAL ABUSE: threat to call police on victimized partner, use court system against victimized partner (i.e. custody change), threaten to call child services, immigration or other governmental agencies
 
-    INDIRECT IPV INDICATORS (Strong Evidence):
-    - Women's shelter stay (e.g., Family Violence Project) → AUTOMATIC IPV
-    - Police separation/intervention in partner relationship → HIGH IPV probability
-    - Restraining order against partner → HIGH IPV probability
-    - "Domestic issues" or "domestic violence" mentioned → Likely IPV
-    - Partner arrested for DV → HIGH IPV probability
-
-    VICTIM ROLE CHECK:
-    - Deceased must be IPV victim, not perpetrator
+    STRICT EXCLUSION CRITERIA (NOT IPV):
+    - Deceased initiated violence AND partner restrained/defended = Self-defense, NOT IPV
+    - Mutual combat (both violent, no clear victim) = NOT IPV
+    - Deceased was perpetrator, not victim = NOT IPV
     - Homicide victim (not suicide) = NOT IPV for this study
+    - Single argument without abuse pattern = NOT IPV
+
+    REQUIRE CLEAR EVIDENCE:
+    - Must have explicit abuse BY partner AGAINST deceased
+    - Breakups, arguments, sadness alone = NOT IPV
+    - When uncertain, default to FALSE
 
   user_template: |
-    TASK: Determine if the deceased was a victim of IPV.
+    TASK: Determine if the deceased was a victim of IPV using strict criteria.
 
-    Step 1: Check for INDIRECT indicators (shelter, police intervention, restraining orders, domestic issues)
-    Step 2: Identify deceased's role (victim vs perpetrator)
-    Step 3: Check for intimate partner relationship
-    Step 4: Identify explicit abusive behaviors
-    Step 5: Final determination
+    Step 1: Was this a suicide (self-inflicted death)? If homicide, mark FALSE
+    Step 2: Who initiated violence? If deceased attacked partner first, likely self-defense
+    Step 3: Check for abuse BY partner AGAINST deceased (not vice versa)
+    Step 4: Verify evidence is explicit, not implied
+    Step 5: Women's shelter = AUTO TRUE
+    Step 6: Final determination
 
     Narrative: <<TEXT>>
 

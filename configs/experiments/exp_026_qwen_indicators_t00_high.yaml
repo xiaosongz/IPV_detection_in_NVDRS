@@ -1,10 +1,10 @@
 experiment:
-  name: "Indirect Indicators (T=0.0, Reasoning=High)"
-  author: "Xiaosong"
-  notes: "v0.3.2 with indirect IPV indicators (shelter, police, restraining orders), temp=0.0, reasoning=high"
+  name: "Indirect Indicators (T=0.0, Reasoning=High) - Qwen3-80B"
+  author: "gemini"
+  notes: "Replication of exp-011 with qwen3-next-80b-a3b-thinking-mlx"
 
 model:
-  name: "mlx-community/gpt-oss-120b"
+  name: "qwen3-next-80b-a3b-thinking-mlx"
   provider: "mlx"
   api_url: "http://localhost:1234/v1/chat/completions"
   temperature: 0.0

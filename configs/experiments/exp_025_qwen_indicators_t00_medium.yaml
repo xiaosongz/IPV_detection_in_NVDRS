@@ -1,10 +1,10 @@
 experiment:
-  name: "Indirect Indicators (T=0.0, Reasoning=High)"
-  author: "Xiaosong"
-  notes: "v0.3.2 with indirect IPV indicators (shelter, police, restraining orders), temp=0.0, reasoning=high"
+  name: "Indirect Indicators (T=0.0, Reasoning=Medium) - Qwen3-80B"
+  author: "gemini"
+  notes: "Replication of exp-010 with qwen3-next-80b-a3b-thinking-mlx"
 
 model:
-  name: "mlx-community/gpt-oss-120b"
+  name: "qwen3-next-80b-a3b-thinking-mlx"
   provider: "mlx"
   api_url: "http://localhost:1234/v1/chat/completions"
   temperature: 0.0
@@ -12,7 +12,7 @@ model:
 prompt:
   version: "v0.3.2_indicators"
   system_prompt: |
-    Reasoning: high
+    Reasoning: medium
 
     ROLE: You are an expert trained to detect if the deceased was a victim of intimate partner violence (IPV) from law enforcement and medical examiner reports following a suicide.
 

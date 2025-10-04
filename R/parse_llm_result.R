@@ -242,9 +242,12 @@ clean_llm_content <- function(content) {
 
 # Helper: Extract JSON from content
 extract_json_from_content <- function(content) {
+  # Repair common LLM JSON errors before parsing
+  repaired_content <- repair_json(content)
+  
   # First try: direct parsing
   json_result <- tryCatch(
-    jsonlite::fromJSON(content, simplifyVector = FALSE),
+    jsonlite::fromJSON(repaired_content, simplifyVector = FALSE),
     error = function(e) NULL
   )
 
@@ -254,7 +257,7 @@ extract_json_from_content <- function(content) {
 
   # Second try: extract JSON objects from mixed content
   json_patterns <- stringr::str_extract_all(
-    content,
+    repaired_content,
     "\\{(?:[^{}]|\\{[^{}]*\\})*\\}"
   )[[1]]
 
