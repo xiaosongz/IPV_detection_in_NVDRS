@@ -51,13 +51,23 @@ prompt:
     - confidence must be a number: 0.9, 0.75, 0.85
     - Never spell out: "0. nine" is INVALID
 
-    Required format:
+    Return this EXACT JSON structure:
     {
-      "detected": true/false,
-      "confidence": 0.00-1.00,
-      "indicators": ["exact tokens from vocab list"],
-      "rationale": "≤200 char fact-based explanation"
+      "detected": <boolean>,          // true or false
+      "confidence": <number>,          // decimal 0.0 to 1.0, e.g., 0.85
+      "rationale": <string>            // max 200 characters
     }
+
+    Valid confidence examples:
+    - "confidence": 0.9   ✓
+    - "confidence": 0.75  ✓
+    - "confidence": 0.85  ✓
+
+    Invalid (DO NOT USE):
+    - "confidence": 0. nine  ✗ (never spell numbers)
+    - "confidence": "0.9"    ✗ (must be number, not string)
+
+    Your response must be valid JSON parseable by JSON.parse()
 
 data:
   file: "data-raw/suicide_IPV_manuallyflagged.xlsx"
