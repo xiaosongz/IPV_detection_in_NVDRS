@@ -58,6 +58,7 @@ data-raw/*
 data/*.csv
 data/*.xlsx
 data/*.xls
+!data/synthetic_narratives.csv
 data/*.rds
 data/*.RData
 !data/.gitkeep
@@ -90,4 +91,4 @@ test_experiments.db
 *.db-wal
 
 # Experiment logs (too large for git)
-logs/experiments/*/ 
+logs/experiments/*/
