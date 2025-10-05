@@ -1,16 +1,20 @@
 experiment:
   name: "test_minimal"
-  model_name: "test-model"
+
+model:
+  name: "test-model"
   temperature: 0.0
-  max_tokens: 500
   api_url: "http://localhost:1234/v1/chat/completions"
 
-data:
-  file: "test_data.xlsx"
-  max_narratives: 10
-
-prompts:
-  system: "You are an IPV detection assistant."
-  user_template: "Analyze this narrative for IPV: {text}"
+prompt:
   version: "test-v1"
-  author: "test"
+  system_prompt: "You are an IPV detection assistant."
+  user_template: "Analyze this narrative for IPV: <<TEXT>>"
+
+data:
+  file: "tests/fixtures/data/test_data.csv"
+
+run:
+  seed: 123
+  save_incremental: true
+  save_csv_json: true

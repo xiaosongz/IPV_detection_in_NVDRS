@@ -1,31 +1,29 @@
 experiment:
   name: "test_complete"
-  model_name: "test-model-complete"
-  model_provider: "test-provider"
+
+model:
+  name: "test-model-complete"
+  provider: "test-provider"
   temperature: 0.5
-  max_tokens: 1000
   api_url: "http://localhost:1234/v1/chat/completions"
-  run_seed: 42
 
-data:
-  file: "test_data.xlsx"
-  force_reload: false
-  max_narratives: 100
-
-prompts:
-  system: |
+prompt:
+  version: "test-v2"
+  system_prompt: |
     You are an expert IPV detection system.
     Analyze narratives carefully for signs of intimate partner violence.
   user_template: |
     Analyze the following narrative for IPV:
-    
-    {text}
-    
-    Provide your analysis in JSON format.
-  version: "test-v2"
-  author: "test-author"
 
-output:
-  save_csv: true
-  save_json: true
-  log_level: "DEBUG"
+    <<TEXT>>
+
+    Provide your analysis in JSON format.
+
+data:
+  file: "tests/fixtures/data/test_data.csv"
+  max_narratives: 100
+
+run:
+  seed: 42
+  save_incremental: true
+  save_csv_json: true

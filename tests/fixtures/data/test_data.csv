@@ -1,0 +1,3 @@
+incident_id,narrative_type,narrative_text,manual_flag_ind
+INC-001,cme,Test narrative 1,0
+INC-002,le,Test narrative 2,1

@@ -17,17 +17,19 @@ being analyzed. Used for tracking and database storage.}
 result (e.g., batch_id, user_id, processing_date).}
 }
 \value{
-A list with standardized structure containing:
+A single-row tibble with standardized structure containing:
 \describe{
 \item{detected}{Logical. TRUE if IPV detected, FALSE if not, NA if parsing failed}
 \item{confidence}{Numeric. Confidence score 0.0-1.0, NA if not available}
+\item{indicators}{List. Array of indicator tokens from the vocabulary}
+\item{rationale}{Character. Concise justification for the detection}
+\item{reasoning}{Character. Model's reasoning/thinking process if available}
 \item{model}{Character. The model used for generation}
 \item{created_at}{Character. ISO timestamp from the response}
 \item{response_id}{Character. Unique identifier for this completion}
 \item{tokens_used}{Integer. Total tokens consumed}
 \item{prompt_tokens}{Integer. Tokens in the prompt}
 \item{completion_tokens}{Integer. Tokens in the completion}
-\item{response_time_ms}{Numeric. Response time if available}
 \item{narrative_id}{Character. User-provided narrative identifier}
 \item{narrative_length}{Integer. Length of input narrative if available}
 \item{parse_error}{Logical. TRUE if JSON parsing failed}
@@ -50,7 +52,7 @@ parsed <- parse_llm_result(response)
 
 # With narrative ID and metadata
 parsed <- parse_llm_result(
-  response, 
+  response,
   narrative_id = "case_123",
   metadata = list(batch = "2025-01", source = "NVDRS")
 )
