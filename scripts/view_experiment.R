@@ -35,6 +35,7 @@ if (length(args) == 0) {
 }
 
 exp_id <- args[1]
+# exp_id <- "71d93444-4528-4c9e-8c3a-fa057dabdb45"
 
 con <- get_db_connection()
 

@@ -742,6 +742,17 @@ dbGetQuery(conn, "
   ORDER BY avg_sec
 ")
 
+# 7. Token usage (max + average per experiment)
+dbGetQuery(conn, "
+  SELECT
+    MAX(tokens_used) AS max_tokens,
+    AVG(tokens_used) AS avg_tokens
+  FROM narrative_results
+  WHERE experiment_id = 'exp_12345'
+    AND tokens_used IS NOT NULL
+    AND error_occurred = 0
+")
+
 dbDisconnect(conn)
 ```
 
