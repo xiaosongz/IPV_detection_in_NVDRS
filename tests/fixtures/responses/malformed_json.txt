@@ -1,0 +1,1 @@
+{"detected": true, "confidence": 0.85, "indicators": "test"

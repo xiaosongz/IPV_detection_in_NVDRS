@@ -1,0 +1,11 @@
+experiment:
+  name: "test_bad_temp"
+  model_name: "test-model"
+  temperature: 5.0  # Too high - INVALID
+  
+data:
+  file: "test_data.xlsx"
+
+prompts:
+  system: "Test"
+  user_template: "Test {text}"

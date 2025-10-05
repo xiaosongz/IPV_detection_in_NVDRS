@@ -1,0 +1,11 @@
+{
+  "detected": false,
+  "confidence": 0.88,
+  "indicators": "none identified",
+  "rationale": "No indicators of intimate partner violence found in the narrative. Incident appears unrelated to IPV.",
+  "reasoning_steps": [
+    "Reviewed narrative for IPV indicators",
+    "No relationship violence patterns identified",
+    "Incident context does not suggest IPV"
+  ]
+}
