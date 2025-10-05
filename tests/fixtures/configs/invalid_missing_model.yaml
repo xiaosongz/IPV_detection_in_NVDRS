@@ -1,0 +1,11 @@
+experiment:
+  name: "test_invalid"
+  # Missing model_name - INVALID
+  temperature: 0.0
+
+data:
+  file: "test_data.xlsx"
+
+prompts:
+  system: "Test"
+  user_template: "Test {text}"

@@ -1,0 +1,16 @@
+experiment:
+  name: "test_minimal"
+  model_name: "test-model"
+  temperature: 0.0
+  max_tokens: 500
+  api_url: "http://localhost:1234/v1/chat/completions"
+
+data:
+  file: "test_data.xlsx"
+  max_narratives: 10
+
+prompts:
+  system: "You are an IPV detection assistant."
+  user_template: "Analyze this narrative for IPV: {text}"
+  version: "test-v1"
+  author: "test"

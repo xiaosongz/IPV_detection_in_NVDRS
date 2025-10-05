@@ -1,0 +1,341 @@
+# Custom Test Assertions
+#
+# Domain-specific assertion functions for IPV detection testing
+
+#' Expect a valid LLM result structure
+#'
+#' @param result Result object to check
+#' @param allow_na Allow NA values in optional fields
+#' @export
+expect_valid_result <- function(result, allow_na = FALSE) {
+  # Must be a list
+  expect_type(result, "list")
+  
+  # Required fields
+  expect_true("detected" %in% names(result), 
+              info = "Result must have 'detected' field")
+  expect_true("confidence" %in% names(result),
+              info = "Result must have 'confidence' field")
+  
+  # Check detected field
+  expect_type(result$detected, "logical")
+  expect_length(result$detected, 1)
+  
+  # Check confidence field
+  expect_type(result$confidence, "double")
+  expect_length(result$confidence, 1)
+  
+  if (!allow_na || !is.na(result$confidence)) {
+    expect_true(result$confidence >= 0)
+    expect_true(result$confidence <= 1)
+  }
+  
+  # Optional fields should exist
+  optional_fields <- c("indicators", "rationale", "reasoning_steps")
+  for (field in optional_fields) {
+    if (field %in% names(result)) {
+      field_value <- result[[field]]
+      if (!is.null(field_value) && length(field_value) > 0 && !all(is.na(field_value))) {
+        expect_type(field_value, "character")
+      }
+    }
+  }
+  
+  invisible(result)
+}
+
+#' Expect a valid database connection
+#'
+#' @param con Database connection to check
+#' @export
+expect_valid_db <- function(con) {
+  # Check connection is valid S4 object
+  expect_s4_class(con, "SQLiteConnection")
+  expect_true(DBI::dbIsValid(con),
+              info = "Database connection must be valid")
+  
+  # Check required tables exist
+  tables <- DBI::dbListTables(con)
+  required_tables <- c("experiments", "narrative_results", "source_narratives")
+  
+  for (table in required_tables) {
+    expect_true(table %in% tables,
+                info = sprintf("Table '%s' must exist", table))
+  }
+  
+  invisible(con)
+}
+
+#' Expect valid performance metrics
+#'
+#' @param metrics Metrics list or vector
+#' @export
+expect_valid_metrics <- function(metrics) {
+  # Check structure
+  if (is.list(metrics)) {
+    metric_names <- c("accuracy", "precision_ipv", "recall_ipv", "f1_ipv")
+    for (name in metric_names) {
+      if (name %in% names(metrics)) {
+        value <- metrics[[name]]
+        if (!is.na(value)) {
+          expect_true(value >= 0, 
+                    info = sprintf("%s must be >= 0", name))
+          expect_true(value <= 1,
+                    info = sprintf("%s must be <= 1", name))
+        }
+      }
+    }
+  } else {
+    # Vector of metrics
+    for (value in metrics) {
+      if (!is.na(value)) {
+        expect_true(value >= 0)
+        expect_true(value <= 1)
+      }
+    }
+  }
+  
+  invisible(metrics)
+}
+
+#' Expect a valid experiment record
+#'
+#' @param experiment Experiment record (tibble row or list)
+#' @export
+expect_valid_experiment <- function(experiment) {
+  # Required fields
+  required_fields <- c(
+    "experiment_id", "experiment_name", "status",
+    "model_name", "system_prompt", "user_template"
+  )
+  
+  for (field in required_fields) {
+    expect_true(field %in% names(experiment),
+                info = sprintf("Experiment must have '%s' field", field))
+    expect_false(is.na(experiment[[field]]),
+                info = sprintf("Experiment '%s' cannot be NA", field))
+  }
+  
+  # Status must be valid
+  valid_statuses <- c("pending", "running", "completed", "failed", "stalled")
+  expect_true(experiment$status %in% valid_statuses,
+              info = sprintf("Status must be one of: %s", 
+                           paste(valid_statuses, collapse = ", ")))
+  
+  # Temperature should be in valid range if present
+  if ("temperature" %in% names(experiment) && !is.na(experiment$temperature)) {
+    expect_true(experiment$temperature >= 0)
+    expect_true(experiment$temperature <= 2)
+  }
+  
+  invisible(experiment)
+}
+
+#' Expect a valid configuration object
+#'
+#' @param config Configuration list
+#' @export
+expect_valid_config <- function(config) {
+  # Must be a list
+  expect_type(config, "list")
+  
+  # Required top-level sections
+  required_sections <- c("experiment", "data", "prompts")
+  for (section in required_sections) {
+    expect_true(section %in% names(config),
+                info = sprintf("Config must have '%s' section", section))
+  }
+  
+  # Check experiment section
+  expect_true("model_name" %in% names(config$experiment),
+              info = "experiment section must have model_name")
+  expect_true("temperature" %in% names(config$experiment),
+              info = "experiment section must have temperature")
+  
+  # Check prompts section
+  expect_true("system" %in% names(config$prompts),
+              info = "prompts section must have system prompt")
+  expect_true("user_template" %in% names(config$prompts),
+              info = "prompts section must have user_template")
+  
+  invisible(config)
+}
+
+#' Expect a valid narrative tibble
+#'
+#' @param narratives Tibble of narratives
+#' @param min_rows Minimum number of rows expected
+#' @export
+expect_valid_narratives <- function(narratives, min_rows = 1) {
+  # Check it's a tibble/data.frame
+  expect_true(inherits(narratives, "data.frame") || inherits(narratives, "tbl_df"))
+  
+  # Check minimum rows
+  n_rows <- nrow(narratives)
+  expect_true(n_rows >= min_rows,
+              info = sprintf("Expected at least %d narratives, got %d", min_rows, n_rows))
+  
+  # Required columns
+  required_cols <- c("incident_id", "narrative_type", "narrative_text")
+  for (col in required_cols) {
+    expect_true(col %in% names(narratives),
+                info = sprintf("Narratives must have '%s' column", col))
+  }
+  
+  # incident_id should be character
+  expect_equal(typeof(narratives$incident_id), "character")
+  
+  # No duplicate incident_id + narrative_type combinations
+  if (nrow(narratives) > 1) {
+    key <- paste(narratives$incident_id, narratives$narrative_type, sep = "_")
+    n_unique <- length(unique(key))
+    expect_equal(length(key), n_unique,
+                info = sprintf("No duplicate combinations allowed: %d rows, %d unique", 
+                              length(key), n_unique))
+  }
+  
+  invisible(narratives)
+}
+
+#' Expect token usage is valid
+#'
+#' @param usage Token usage list or values
+#' @export
+expect_valid_token_usage <- function(usage) {
+  if (is.list(usage)) {
+    if ("prompt_tokens" %in% names(usage)) {
+      expect_type(usage$prompt_tokens, "integer")
+      expect_true(usage$prompt_tokens >= 0)
+    }
+    if ("completion_tokens" %in% names(usage)) {
+      expect_type(usage$completion_tokens, "integer")
+      expect_true(usage$completion_tokens >= 0)
+    }
+    if ("total_tokens" %in% names(usage)) {
+      expect_type(usage$total_tokens, "integer")
+      expect_true(usage$total_tokens >= 0)
+    }
+  } else {
+    # Single token count
+    expect_type(usage, "integer")
+    expect_true(usage >= 0)
+  }
+  
+  invisible(usage)
+}
+
+#' Expect file exists and is readable
+#'
+#' @param path File path
+#' @param extension Expected extension (optional)
+#' @export
+expect_file_exists <- function(path, extension = NULL) {
+  expect_true(file.exists(path),
+              info = sprintf("File must exist: %s", path))
+  
+  if (!is.null(extension)) {
+    actual_ext <- tools::file_ext(path)
+    expect_equal(actual_ext, extension,
+                info = sprintf("Expected .%s file, got .%s", extension, actual_ext))
+  }
+  
+  # Check it's readable
+  expect_true(file.access(path, mode = 4) == 0,
+              info = sprintf("File must be readable: %s", path))
+  
+  invisible(path)
+}
+
+#' Expect directory exists and is writable
+#'
+#' @param path Directory path
+#' @export
+expect_dir_exists <- function(path) {
+  expect_true(dir.exists(path),
+              info = sprintf("Directory must exist: %s", path))
+  
+  # Check it's writable
+  expect_true(file.access(path, mode = 2) == 0,
+              info = sprintf("Directory must be writable: %s", path))
+  
+  invisible(path)
+}
+
+#' Expect valid JSON string
+#'
+#' @param json_string JSON string
+#' @export
+expect_valid_json <- function(json_string) {
+  expect_type(json_string, "character")
+  expect_length(json_string, 1)
+  
+  # Try to parse it
+  expect_error(
+    parsed <- jsonlite::fromJSON(json_string),
+    NA,  # No error expected
+    info = "JSON string must be parseable"
+  )
+  
+  invisible(json_string)
+}
+
+#' Expect counts match (for confusion matrix)
+#'
+#' @param actual Actual counts list
+#' @param expected Expected counts list
+#' @export
+expect_counts_match <- function(actual, expected) {
+  count_fields <- c("n_true_positive", "n_true_negative", 
+                   "n_false_positive", "n_false_negative")
+  
+  for (field in count_fields) {
+    if (field %in% names(expected)) {
+      expect_equal(actual[[field]], expected[[field]],
+                  info = sprintf("Mismatch in %s", field))
+    }
+  }
+  
+  invisible(actual)
+}
+
+#' Expect experiment was logged correctly
+#'
+#' @param conn Database connection
+#' @param experiment_id Experiment ID
+#' @param expected_status Expected status (optional)
+#' @export
+expect_experiment_logged <- function(conn, experiment_id, expected_status = NULL) {
+  # Check experiment exists
+  exp <- DBI::dbGetQuery(conn, 
+    "SELECT * FROM experiments WHERE experiment_id = ?",
+    params = list(experiment_id))
+  
+  expect_equal(nrow(exp), 1,
+              info = sprintf("Experiment %s should exist exactly once", experiment_id))
+  
+  # Check status if provided
+  if (!is.null(expected_status)) {
+    expect_equal(exp$status, expected_status,
+                info = sprintf("Experiment status should be '%s'", expected_status))
+  }
+  
+  invisible(exp)
+}
+
+#' Expect results were logged
+#'
+#' @param conn Database connection  
+#' @param experiment_id Experiment ID
+#' @param min_count Minimum number of results expected
+#' @export
+expect_results_logged <- function(conn, experiment_id, min_count = 1) {
+  results <- DBI::dbGetQuery(conn,
+    "SELECT COUNT(*) as n FROM narrative_results WHERE experiment_id = ?",
+    params = list(experiment_id))
+  
+  expect_true(results$n >= min_count,
+            info = sprintf("Expected at least %d results for experiment %s", 
+                          min_count, experiment_id))
+  
+  invisible(results$n)
+}

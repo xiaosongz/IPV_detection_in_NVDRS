@@ -1,0 +1,11 @@
+{
+  "detected": true,
+  "confidence": 0.92,
+  "indicators": "physical violence, controlling behavior, threats",
+  "rationale": "Clear evidence of intimate partner violence including physical assault and controlling behavior.",
+  "reasoning_steps": [
+    "Identified physical violence in narrative",
+    "Found controlling behaviors",
+    "Confirmed relationship context between victim and perpetrator"
+  ]
+}
