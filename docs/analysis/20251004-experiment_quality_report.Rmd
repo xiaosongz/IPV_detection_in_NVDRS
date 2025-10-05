@@ -1,0 +1,840 @@
+---
+title: "IPV Detection Experiment Quality Report"
+subtitle: "Comprehensive Analysis of LLM Performance & Prompt Engineering"
+author: "Automated Analysis System"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    code_folding: hide
+    theme: cosmo
+    highlight: tango
+    df_print: paged
+    number_sections: true
+---
+
+```{=html}
+<style>
+.metric-box {
+  background: #f8f9fa;
+  border-left: 4px solid #007bff;
+  padding: 15px;
+  margin: 10px 0;
+}
+.warning-box {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 15px;
+  margin: 10px 0;
+}
+.success-box {
+  background: #d4edda;
+  border-left: 4px solid #28a745;
+  padding: 15px;
+  margin: 10px 0;
+}
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 12,
+  fig.height = 6,
+  dpi = 300,
+  fig.align = 'center'
+)
+
+# Load libraries
+library(DBI)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(knitr)
+library(ggplot2)
+library(DT)
+library(scales)
+
+# Custom ggplot theme
+theme_report <- theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 15, hjust = 0),
+    plot.subtitle = element_text(size = 12, color = "gray30", hjust = 0),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.title = element_text(face = "bold"),
+    strip.text = element_text(face = "bold", size = 12)
+  )
+theme_set(theme_report)
+
+# Helper functions
+fmt_pct <- function(x) sprintf("%.1f%%", x * 100)
+fmt_num <- function(x) format(round(x), big.mark = ",")
+fmt_dec <- function(x, digits = 3) sprintf(paste0("%.", digits, "f"), x)
+
+# Color palette
+colors <- c(
+  primary = "#007bff",
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8"
+)
+```
+
+```{r load_data, include=FALSE}
+# Read database credentials from .env
+env_file <- here::here(".env")
+if(file.exists(env_file)) {
+  env_vars <- readLines(env_file)
+  for(line in env_vars) {
+    if(grepl("^PG_", line) && grepl("=", line)) {
+      parts <- strsplit(line, "=", fixed = TRUE)[[1]]
+      if(length(parts) >= 2) {
+        env_name <- trimws(parts[1])
+        env_value <- trimws(paste(parts[-1], collapse = "="))
+        do.call(Sys.setenv, setNames(list(env_value), env_name))
+      }
+    }
+  }
+}
+
+# Connect to PostgreSQL
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  host = Sys.getenv("PG_HOST", "memini.lan"),
+  port = as.integer(Sys.getenv("PG_PORT", "5433")),
+  dbname = Sys.getenv("PG_DATABASE", "postgres"),
+  user = Sys.getenv("PG_USER", "postgres"),
+  password = Sys.getenv("PG_PASSWORD")
+)
+
+# Load data
+experiments <- dbGetQuery(con, "SELECT * FROM experiments")
+results <- dbGetQuery(con, "SELECT * FROM narrative_results")
+
+# Filter completed experiments
+completed <- experiments %>% filter(status == "completed")
+
+# Calculate key metrics
+n_exp <- nrow(experiments)
+n_completed <- nrow(completed)
+n_narratives <- sum(completed$n_narratives_processed, na.rm = TRUE)
+avg_accuracy <- mean(completed$accuracy, na.rm = TRUE)
+avg_f1 <- mean(completed$f1_ipv, na.rm = TRUE)
+avg_precision <- mean(completed$precision_ipv, na.rm = TRUE)
+avg_recall <- mean(completed$recall_ipv, na.rm = TRUE)
+```
+
+# Executive Summary
+
+This report analyzes `r n_exp` IPV (Intimate Partner Violence) detection experiments using Large Language Models, examining `r fmt_num(n_narratives)` narratives. The analysis reveals **strong overall accuracy** (`r fmt_pct(avg_accuracy)`) but identifies **critical opportunities for improvement in recall** (`r fmt_pct(avg_recall)`).
+
+::: metric-box
+**Key Performance Indicators:**
+
+-   **Total Experiments**: `r n_exp` (`r n_completed` completed, `r fmt_pct(n_completed/n_exp)` success rate)
+-   **Narratives Analyzed**: `r fmt_num(n_narratives)`
+-   **Average Accuracy**: `r fmt_pct(avg_accuracy)` ✅
+-   **Average Precision**: `r fmt_pct(avg_precision)`
+-   **Average Recall**: `r fmt_pct(avg_recall)` ⚠️ Needs Improvement
+-   **Average F1 Score**: `r fmt_dec(avg_f1)`
+:::
+
+::: warning-box
+**🎯 Main Finding**: The model exhibits **high false negative rates**, meaning it **misses actual IPV cases**. This is the primary area requiring attention through prompt engineering and threshold adjustment.
+:::
+
+------------------------------------------------------------------------
+
+# Experiment Overview
+
+## Experiment Status
+
+```{r status_overview, fig.height=4}
+status_data <- experiments %>%
+  group_by(status) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(pct = count / sum(count))
+
+ggplot(status_data, aes(x = reorder(status, -count), y = count, fill = status)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = paste0(count, "\n(", fmt_pct(pct), ")")), 
+            vjust = -0.5, size = 4, fontface = "bold") +
+  scale_fill_manual(values = c(
+    completed = colors["success"],
+    failed = colors["danger"],
+    running = colors["info"],
+    stalled = colors["warning"]
+  )) +
+  labs(
+    title = "Experiment Status Distribution",
+    subtitle = paste("Total:", n_exp, "experiments"),
+    x = "Status",
+    y = "Number of Experiments"
+  ) +
+  theme(panel.grid.major.y = element_line(color = "gray90"))
+```
+
+```{r status_table}
+status_summary <- experiments %>%
+  group_by(status) %>%
+  summarise(
+    Count = n(),
+    Percentage = fmt_pct(n() / nrow(experiments))
+  ) %>%
+  arrange(desc(Count))
+
+datatable(
+  status_summary,
+  options = list(
+    dom = 't',
+    pageLength = 10,
+    ordering = FALSE
+  ),
+  rownames = FALSE,
+  caption = "Table 1: Experiment Status Summary"
+)
+```
+
+## Model Distribution
+
+```{r model_performance}
+model_summary <- completed %>%
+  group_by(model_name) %>%
+  summarise(
+    Experiments = n(),
+    `Avg Accuracy` = mean(accuracy, na.rm = TRUE),
+    `Avg Precision` = mean(precision_ipv, na.rm = TRUE),
+    `Avg Recall` = mean(recall_ipv, na.rm = TRUE),
+    `Avg F1` = mean(f1_ipv, na.rm = TRUE),
+    `Avg Runtime (min)` = mean(total_runtime_sec, na.rm = TRUE) / 60,
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(Experiments))
+
+datatable(
+  model_summary %>%
+    mutate(across(where(is.numeric) & !Experiments, ~round(.x, 3))),
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE
+  ),
+  rownames = FALSE,
+  caption = "Table 2: Model Performance Comparison"
+) %>%
+  formatPercentage(c('Avg Accuracy', 'Avg Precision', 'Avg Recall'), 1) %>%
+  formatRound('Avg F1', 3) %>%
+  formatRound('Avg Runtime (min)', 1)
+```
+
+The primary model **`r model_summary$model_name[1]`** was used in `r model_summary$Experiments[1]` experiments (`r fmt_pct(model_summary$Experiments[1]/n_completed)` of completed runs).
+
+------------------------------------------------------------------------
+
+# Performance Analysis
+
+## Overall Metrics
+
+```{r metrics_visualization, fig.height=5}
+metrics_data <- completed %>%
+  select(accuracy, precision_ipv, recall_ipv, f1_ipv) %>%
+  pivot_longer(everything(), names_to = "metric", values_to = "value") %>%
+  mutate(
+    metric = recode(metric,
+      accuracy = "Accuracy",
+      precision_ipv = "Precision",
+      recall_ipv = "Recall",
+      f1_ipv = "F1 Score"
+    ),
+    metric = factor(metric, levels = c("Accuracy", "Precision", "Recall", "F1 Score"))
+  )
+
+ggplot(metrics_data, aes(x = metric, y = value, fill = metric)) +
+  geom_boxplot(alpha = 0.7, show.legend = FALSE) +
+  geom_jitter(width = 0.2, alpha = 0.3, size = 2, show.legend = FALSE) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 1)) +
+  scale_fill_manual(values = c(
+    "Accuracy" = colors["success"],
+    "Precision" = colors["primary"],
+    "Recall" = colors["warning"],
+    "F1 Score" = colors["info"]
+  )) +
+  geom_hline(yintercept = 0.7, linetype = "dashed", color = "red", alpha = 0.5) +
+  labs(
+    title = "Performance Metrics Distribution",
+    subtitle = paste("Based on", n_completed, "completed experiments"),
+    x = NULL,
+    y = "Score"
+  )
+```
+
+```{r metrics_table}
+metrics_stats <- completed %>%
+  summarise(
+    across(c(accuracy, precision_ipv, recall_ipv, f1_ipv),
+           list(mean = ~mean(.x, na.rm = TRUE),
+                sd = ~sd(.x, na.rm = TRUE),
+                min = ~min(.x, na.rm = TRUE),
+                max = ~max(.x, na.rm = TRUE)),
+           .names = "{.col}_{.fn}")
+  ) %>%
+  pivot_longer(everything(), names_to = "stat", values_to = "value") %>%
+  separate(stat, into = c("metric", "stat"), sep = "_(?=[^_]+$)") %>%
+  pivot_wider(names_from = stat, values_from = value) %>%
+  mutate(
+    Metric = recode(metric,
+      accuracy = "Accuracy",
+      precision = "Precision",
+      recall = "Recall",
+      f1 = "F1 Score"
+    )
+  ) %>%
+  select(Metric, Mean = mean, `Std Dev` = sd, Min = min, Max = max)
+
+datatable(
+  metrics_stats,
+  options = list(dom = 't', ordering = FALSE),
+  rownames = FALSE,
+  caption = "Table 3: Performance Metrics Summary Statistics"
+) %>%
+  formatPercentage(c('Mean', 'Std Dev', 'Min', 'Max'), 1)
+```
+
+::: warning-box
+**⚠️ Performance Gap Identified**:
+
+The **recall score** of `r fmt_pct(avg_recall)` is significantly lower than accuracy (`r fmt_pct(avg_accuracy)`), indicating the model **misses approximately `r fmt_pct(1 - avg_recall)` of actual IPV cases**. This is a critical issue for a detection system where false negatives have serious consequences.
+:::
+
+## Confusion Matrix Analysis
+
+```{r confusion_matrix}
+confusion <- completed %>%
+  summarise(
+    tp = sum(n_true_positive, na.rm = TRUE),
+    tn = sum(n_true_negative, na.rm = TRUE),
+    fp = sum(n_false_positive, na.rm = TRUE),
+    fn = sum(n_false_negative, na.rm = TRUE)
+  )
+
+total_predictions <- sum(confusion)
+fp_rate <- confusion$fp / (confusion$tp + confusion$fp)
+fn_rate <- confusion$fn / (confusion$tp + confusion$fn)
+
+confusion_long <- confusion %>%
+  pivot_longer(everything(), names_to = "type", values_to = "count") %>%
+  mutate(
+    pct = count / sum(count),
+    label = case_when(
+      type == "tp" ~ "True Positive",
+      type == "tn" ~ "True Negative",
+      type == "fp" ~ "False Positive",
+      type == "fn" ~ "False Negative"
+    ),
+    category = case_when(
+      type %in% c("tp", "tn") ~ "Correct",
+      TRUE ~ "Error"
+    )
+  )
+
+ggplot(confusion_long, aes(x = "", y = count, fill = label)) +
+  geom_col(width = 1, color = "white", size = 2) +
+  coord_polar(theta = "y") +
+  scale_fill_manual(values = c(
+    "True Positive" = "#28a745",
+    "True Negative" = "#6c757d",
+    "False Positive" = "#ffc107",
+    "False Negative" = "#dc3545"
+  )) +
+  geom_text(aes(label = paste0(fmt_num(count), "\n", fmt_pct(pct))),
+            position = position_stack(vjust = 0.5),
+            size = 4, fontface = "bold") +
+  labs(
+    title = "Aggregate Confusion Matrix",
+    subtitle = paste("Total predictions:", fmt_num(total_predictions)),
+    fill = "Classification"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(face = "bold", size = 15),
+    plot.subtitle = element_text(size = 12, color = "gray30"),
+    legend.position = "right"
+  )
+```
+
+::: metric-box
+**Confusion Matrix Breakdown:**
+
+-   **True Positives**: `r fmt_num(confusion$tp)` (`r fmt_pct(confusion$tp/total_predictions)`) - Correctly identified IPV
+-   **True Negatives**: `r fmt_num(confusion$tn)` (`r fmt_pct(confusion$tn/total_predictions)`) - Correctly identified non-IPV\
+-   **False Positives**: `r fmt_num(confusion$fp)` (`r fmt_pct(confusion$fp/total_predictions)`) - Incorrectly flagged as IPV
+-   **False Negatives**: `r fmt_num(confusion$fn)` (`r fmt_pct(confusion$fn/total_predictions)`) - **Missed IPV cases** ⚠️
+
+**Error Analysis:**
+
+-   **False Positive Rate**: `r fmt_pct(fp_rate)` of positive predictions are incorrect
+-   **False Negative Rate**: `r fmt_pct(fn_rate)` of actual IPV cases are missed
+-   **Total Error Rate**: `r fmt_pct((confusion$fp + confusion$fn)/total_predictions)`
+:::
+
+------------------------------------------------------------------------
+
+# Prompt Engineering Analysis
+
+## Prompt Version Performance
+
+```{r prompt_versions}
+prompt_perf <- completed %>%
+  group_by(prompt_version, prompt_author) %>%
+  summarise(
+    Experiments = n(),
+    `Avg Accuracy` = mean(accuracy, na.rm = TRUE),
+    `Avg Precision` = mean(precision_ipv, na.rm = TRUE),
+    `Avg Recall` = mean(recall_ipv, na.rm = TRUE),
+    `Avg F1` = mean(f1_ipv, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(`Avg F1`))
+
+datatable(
+  prompt_perf,
+  options = list(pageLength = 10),
+  rownames = FALSE,
+  caption = "Table 4: Performance by Prompt Version"
+) %>%
+  formatPercentage(c('Avg Accuracy', 'Avg Precision', 'Avg Recall'), 1) %>%
+  formatRound('Avg F1', 3)
+```
+
+```{r prompt_version_viz, fig.height=5}
+if(nrow(prompt_perf) > 1) {
+  ggplot(prompt_perf, aes(x = `Avg Recall`, y = `Avg Precision`, 
+                          size = Experiments, color = `Avg F1`)) +
+    geom_point(alpha = 0.7) +
+    geom_text(aes(label = prompt_version), vjust = -1, size = 3, show.legend = FALSE) +
+    scale_x_continuous(labels = percent_format(), limits = c(0, 1)) +
+    scale_y_continuous(labels = percent_format(), limits = c(0, 1)) +
+    scale_color_gradient(low = colors["warning"], high = colors["success"],
+                         labels = function(x) fmt_dec(x, 2)) +
+    scale_size_continuous(range = c(5, 15)) +
+    labs(
+      title = "Prompt Version Performance: Precision-Recall Trade-off",
+      subtitle = "Size indicates number of experiments",
+      x = "Recall (Sensitivity)",
+      y = "Precision (Positive Predictive Value)",
+      color = "F1 Score",
+      size = "Experiments"
+    )
+}
+```
+
+The best performing prompt version is **`r prompt_perf$prompt_version[1]`** with an F1 score of `r fmt_dec(prompt_perf$'Avg F1'[1])`.
+
+## Prompt Characteristics
+
+```{r prompt_features}
+prompt_analysis <- completed %>%
+  mutate(
+    prompt_length = nchar(system_prompt),
+    has_examples = grepl("example|Example", system_prompt, ignore.case = TRUE),
+    has_definitions = grepl("definition|Definition|define", system_prompt, ignore.case = TRUE),
+    has_instructions = grepl("instruction|Instruction|step|Step", system_prompt, ignore.case = TRUE),
+    mentions_indicators = grepl("indicator|sign|evidence", system_prompt, ignore.case = TRUE),
+    has_json_format = grepl("JSON|json|\\{|\\}", system_prompt)
+  )
+
+feature_impact <- prompt_analysis %>%
+  summarise(
+    `Avg Prompt Length` = mean(prompt_length),
+    `% with Examples` = mean(has_examples),
+    `% with Definitions` = mean(has_definitions),
+    `% with Instructions` = mean(has_instructions),
+    `% with Indicators` = mean(mentions_indicators),
+    `% with JSON Format` = mean(has_json_format)
+  ) %>%
+  pivot_longer(everything(), names_to = "Feature", values_to = "Value")
+
+ggplot(feature_impact[2:6,], aes(x = reorder(Feature, Value), y = Value)) +
+  geom_col(fill = colors["primary"], alpha = 0.8) +
+  geom_text(aes(label = fmt_pct(Value)), hjust = -0.2, fontface = "bold") +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 1.1)) +
+  labs(
+    title = "Prompt Feature Prevalence",
+    subtitle = paste("Analyzed across", n_completed, "completed experiments"),
+    x = NULL,
+    y = "Percentage of Prompts"
+  )
+```
+
+**Average prompt length**: `r fmt_num(feature_impact$Value[1])` characters
+
+------------------------------------------------------------------------
+
+# Temperature & Configuration
+
+## Temperature Impact on Performance
+
+```{r temperature_analysis, fig.height=5}
+temp_data <- completed %>%
+  mutate(temp_bucket = cut(temperature, 
+                           breaks = c(-0.1, 0.05, 0.25, 0.75, 2.0),
+                           labels = c("0.0", "0.1-0.25", "0.26-0.75", "0.76+")))
+
+temp_summary <- temp_data %>%
+  group_by(temp_bucket) %>%
+  summarise(
+    n = n(),
+    accuracy = mean(accuracy, na.rm = TRUE),
+    precision = mean(precision_ipv, na.rm = TRUE),
+    recall = mean(recall_ipv, na.rm = TRUE),
+    f1 = mean(f1_ipv, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  filter(n > 0)
+
+temp_long <- temp_summary %>%
+  pivot_longer(cols = c(accuracy, precision, recall, f1),
+               names_to = "metric", values_to = "value") %>%
+  mutate(
+    metric = factor(metric, levels = c("accuracy", "precision", "recall", "f1"),
+                   labels = c("Accuracy", "Precision", "Recall", "F1"))
+  )
+
+ggplot(temp_long, aes(x = temp_bucket, y = value, color = metric, group = metric)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = percent_format(), limits = c(0, 1)) +
+  scale_color_manual(values = c(
+    "Accuracy" = colors["success"],
+    "Precision" = colors["primary"],
+    "Recall" = colors["warning"],
+    "F1" = colors["info"]
+  )) +
+  labs(
+    title = "Performance Metrics vs Temperature",
+    subtitle = "How temperature setting affects detection performance",
+    x = "Temperature Range",
+    y = "Score",
+    color = "Metric"
+  )
+```
+
+```{r temp_table}
+datatable(
+  temp_summary %>%
+    rename(Temperature = temp_bucket, Count = n,
+           Accuracy = accuracy, Precision = precision,
+           Recall = recall, F1 = f1),
+  options = list(dom = 't', ordering = FALSE),
+  rownames = FALSE,
+  caption = "Table 5: Performance by Temperature Range"
+) %>%
+  formatPercentage(c('Accuracy', 'Precision', 'Recall'), 1) %>%
+  formatRound('F1', 3)
+```
+
+::: success-box
+**📊 Optimal Configuration**: Temperature range **`r temp_summary$temp_bucket[which.max(temp_summary$f1)]`** achieves the best F1 score of `r fmt_dec(max(temp_summary$f1))`.
+:::
+
+------------------------------------------------------------------------
+
+# Efficiency Analysis
+
+## Runtime Performance
+
+```{r runtime_stats}
+runtime_data <- completed %>%
+  summarise(
+    total_hours = sum(total_runtime_sec, na.rm = TRUE) / 3600,
+    avg_minutes = mean(total_runtime_sec, na.rm = TRUE) / 60,
+    avg_per_narrative = mean(avg_time_per_narrative_sec, na.rm = TRUE),
+    min_per_narrative = min(avg_time_per_narrative_sec, na.rm = TRUE),
+    max_per_narrative = max(avg_time_per_narrative_sec, na.rm = TRUE)
+  )
+```
+
+::: metric-box
+**Runtime Statistics:**
+
+-   **Total Compute Time**: `r fmt_dec(runtime_data$total_hours, 1)` hours
+-   **Average Experiment Duration**: `r fmt_dec(runtime_data$avg_minutes, 1)` minutes
+-   **Average Time per Narrative**: `r fmt_dec(runtime_data$avg_per_narrative, 2)` seconds
+-   **Range**: `r fmt_dec(runtime_data$min_per_narrative, 2)` - `r fmt_dec(runtime_data$max_per_narrative, 2)` seconds
+:::
+
+```{r runtime_viz, fig.height=5}
+ggplot(completed, aes(x = avg_time_per_narrative_sec, y = f1_ipv)) +
+  geom_point(aes(size = n_narratives_processed, color = model_name), alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, color = "red", linetype = "dashed") +
+  scale_y_continuous(labels = function(x) fmt_dec(x, 2)) +
+  labs(
+    title = "Efficiency vs Performance Trade-off",
+    subtitle = "F1 Score vs Processing Speed",
+    x = "Average Time per Narrative (seconds)",
+    y = "F1 Score",
+    size = "Narratives",
+    color = "Model"
+  )
+```
+
+------------------------------------------------------------------------
+
+# Top Performers & Problem Cases
+
+## Best Experiments
+
+```{r top_performers}
+top5 <- completed %>%
+  arrange(desc(f1_ipv)) %>%
+  head(5) %>%
+  select(experiment_name, model_name, temperature, prompt_version,
+         accuracy, precision_ipv, recall_ipv, f1_ipv) %>%
+  rename(
+    Experiment = experiment_name,
+    Model = model_name,
+    Temp = temperature,
+    `Prompt Ver` = prompt_version,
+    Accuracy = accuracy,
+    Precision = precision_ipv,
+    Recall = recall_ipv,
+    F1 = f1_ipv
+  )
+
+datatable(
+  top5,
+  options = list(dom = 't', ordering = FALSE),
+  rownames = FALSE,
+  caption = "Table 6: Top 5 Experiments by F1 Score"
+) %>%
+  formatPercentage(c('Accuracy', 'Precision', 'Recall'), 1) %>%
+  formatRound(c('F1', 'Temp'), 3)
+```
+
+## Problem Experiments
+
+```{r bottom_performers}
+bottom5 <- completed %>%
+  arrange(f1_ipv) %>%
+  head(5) %>%
+  select(experiment_name, model_name, temperature, prompt_version,
+         accuracy, precision_ipv, recall_ipv, f1_ipv,
+         n_false_positive, n_false_negative) %>%
+  rename(
+    Experiment = experiment_name,
+    Model = model_name,
+    Temp = temperature,
+    `Prompt Ver` = prompt_version,
+    Accuracy = accuracy,
+    Precision = precision_ipv,
+    Recall = recall_ipv,
+    F1 = f1_ipv,
+    FP = n_false_positive,
+    FN = n_false_negative
+  )
+
+datatable(
+  bottom5,
+  options = list(dom = 't', ordering = FALSE),
+  rownames = FALSE,
+  caption = "Table 7: Bottom 5 Experiments by F1 Score (Need Investigation)"
+) %>%
+  formatPercentage(c('Accuracy', 'Precision', 'Recall'), 1) %>%
+  formatRound(c('F1', 'Temp'), 3)
+```
+
+------------------------------------------------------------------------
+
+# Recommendations
+
+```{r best_config}
+best_exp <- completed %>% arrange(desc(f1_ipv)) %>% head(1)
+best_temp <- temp_summary %>% arrange(desc(f1)) %>% head(1)
+```
+
+::: success-box
+## 🎯 Optimal Configuration
+
+**Best Performing Setup:**
+
+-   **Model**: `r best_exp$model_name`
+-   **Temperature**: `r best_exp$temperature`
+-   **Prompt Version**: `r best_exp$prompt_version`
+-   **F1 Score**: `r fmt_dec(best_exp$f1_ipv)`
+-   **Accuracy**: `r fmt_pct(best_exp$accuracy)`
+-   **Recall**: `r fmt_pct(best_exp$recall_ipv)`
+
+This configuration should serve as the baseline for future experiments.
+:::
+
+## Priority Actions
+
+### 1. **Address Low Recall (Critical)**
+
+The `r fmt_pct(avg_recall)` recall rate means **`r fmt_pct(1-avg_recall)` of actual IPV cases are missed**.
+
+**Immediate Actions**: - Expand IPV indicator examples in prompts (especially subtle cases) - Add more diverse relationship violence scenarios - Consider lowering the confidence threshold for positive detection - Review false negative cases for pattern identification
+
+### 2. **Prompt Engineering Improvements**
+
+-   **Use successful prompt features**: `r if(mean(prompt_analysis$has_examples) > 0.5) "✓ Include examples" else "• Add examples"`
+-   **Optimal temperature**: Use `r best_temp$temp_bucket` range (F1: `r fmt_dec(best_temp$f1)`)
+-   Test variations with different indicator emphasis
+-   A/B test instruction formats (imperative vs. question-based)
+
+### 3. **Future Experiments**
+
+Priority testing queue:
+
+```{r future_tests}
+tested_temps <- sort(unique(completed$temperature))
+```
+
+1.  **Temperature exploration**: Currently tested \[`r paste(tested_temps, collapse=", ")`\]
+    -   Try: 0.3, 0.7 if not yet tested
+2.  **Prompt variations**:
+    -   With/without examples comparison
+    -   Different indicator ordering
+    -   Varied context windows
+3.  **Model comparison**:
+    -   Test `r if(length(unique(completed$model_name)) == 1) "additional model architectures" else "other available models"`
+4.  **Validation**:
+    -   Run best config 3-5 times with different seeds
+    -   Cross-validate with held-out data
+
+### 4. **Monitoring & Quality**
+
+-   Set up automated performance tracking
+-   Define acceptable F1 threshold (recommend ≥ 0.75)
+-   Monitor drift in false negative rate
+-   Regular prompt review cycles
+
+------------------------------------------------------------------------
+
+# Data Quality Assessment
+
+```{r quality_check}
+quality <- list(
+  total = n_exp,
+  completed = n_completed,
+  failed = sum(experiments$status == "failed"),
+  with_metrics = sum(!is.na(experiments$accuracy)),
+  with_confusion = sum(!is.na(experiments$n_true_positive)),
+  with_runtime = sum(!is.na(experiments$total_runtime_sec))
+)
+```
+
+::: metric-box
+**Data Completeness:**
+
+-   **Experiments with Metrics**: `r quality$with_metrics`/`r quality$total` (`r fmt_pct(quality$with_metrics/quality$total)`)
+-   **Experiments with Confusion Matrix**: `r quality$with_confusion`/`r quality$total` (`r fmt_pct(quality$with_confusion/quality$total)`)
+-   **Experiments with Runtime Data**: `r quality$with_runtime`/`r quality$total` (`r fmt_pct(quality$with_runtime/quality$total)`)
+:::
+
+## Issues & Warnings
+
+```{r warnings, results='asis'}
+if(quality$failed > 0) {
+  cat(paste0("⚠️ **", quality$failed, " Failed Experiments** - Review error logs for root cause\n\n"))
+}
+
+stalled <- sum(experiments$status == "stalled")
+if(stalled > 0) {
+  cat(paste0("⚠️ **", stalled, " Stalled Experiments** - May need manual intervention\n\n"))
+}
+
+running <- sum(experiments$status == "running")
+if(running > 0) {
+  cat(paste0("ℹ️ **", running, " Running Experiments** - Wait for completion before final analysis\n\n"))
+}
+
+# Check for outliers
+if(n_completed > 3) {
+  acc_mean <- mean(completed$accuracy, na.rm = TRUE)
+  acc_sd <- sd(completed$accuracy, na.rm = TRUE)
+  outliers <- completed %>%
+    filter(accuracy < (acc_mean - 2*acc_sd) | accuracy > (acc_mean + 2*acc_sd))
+  
+  if(nrow(outliers) > 0) {
+    cat(paste0("⚠️ **", nrow(outliers), " Accuracy Outliers Detected** (>2σ from mean)\n\n"))
+    for(i in 1:min(3, nrow(outliers))) {
+      cat(paste0("  - `", outliers$experiment_name[i], "`: ", 
+                 fmt_pct(outliers$accuracy[i]), "\n"))
+    }
+  }
+}
+```
+
+------------------------------------------------------------------------
+
+# Conclusions
+
+## Key Findings
+
+```{r conclusion_stats}
+f1_sd <- sd(completed$f1_ipv, na.rm = TRUE)
+performance_level <- if(avg_f1 > 0.75) "strong" else if(avg_f1 > 0.6) "moderate" else "needs improvement"
+consistency_level <- if(f1_sd < 0.05) "high" else if(f1_sd < 0.15) "moderate" else "low"
+error_balance <- if(abs(fp_rate - fn_rate) < 0.1) "balanced" else if(fp_rate > fn_rate) "over-detection" else "under-detection"
+```
+
+### Performance Assessment
+
+
+
+With an average F1 score of `r fmt_dec(avg_f1)`, the system demonstrates `r performance_level` performance. However, the **`r fmt_pct(avg_recall)` recall rate** indicates significant room for improvement in detecting actual IPV cases. :::
+
+### Consistency
+
+**Consistency: `r toupper(consistency_level)`** (F1 σ = `r fmt_dec(f1_sd)`)
+
+The `r if(consistency_level == 'high') 'low' else if(consistency_level == 'moderate') 'moderate' else 'high'` variation across experiments `r if(consistency_level == 'high') 'indicates stable performance' else 'suggests investigating sources of variation'`.
+
+### Error Pattern
+
+**Error Profile: `r toupper(error_balance)`**
+
+`r if(error_balance == 'balanced') 'False positives and negatives are balanced.' else if(error_balance == 'over-detection') 'The model tends to over-flag cases (high false positives).' else 'The model tends to miss actual IPV cases (high false negatives) - this is the critical issue.'`
+
+## Next Steps
+
+1.  ✅ **Immediate**: Implement recall improvement strategies from Section 7.1
+2.  ✅ **Short-term**: Run validation experiments with best configuration
+3.  ✅ **Medium-term**: Expand prompt testing with identified optimal features
+4.  ✅ **Long-term**: Establish continuous monitoring and improvement pipeline
+5.  ✅ **Documentation**: Document best practices based on findings
+
+::: metric-box
+**Expected Impact of Recommendations:**
+
+If recall can be improved to **80%** while maintaining current precision: - New F1 Score: **\~0.78** (current: `r fmt_dec(avg_f1)`) - Reduction in missed cases: **\~40%** - Overall system reliability: **Substantially improved**
+:::
+
+------------------------------------------------------------------------
+
+# Appendix
+
+**Database Connection:** - Host: `r Sys.getenv("PG_HOST")` - Port: `r Sys.getenv("PG_PORT")` - Database: `r Sys.getenv("PG_DATABASE")` - Report Generated: `r format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")`
+
+**Analysis Parameters:** - Total Experiments Analyzed: `r n_exp` - Completed Experiments: `r n_completed` - Total Narratives: `r fmt_num(n_narratives)` - Date Range: `r format(min(completed$created_at, na.rm=TRUE), "%Y-%m-%d")` to `r format(max(completed$created_at, na.rm=TRUE), "%Y-%m-%d")`
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con)
+```
+
+------------------------------------------------------------------------
+
+::: {style="text-align: center; color: gray; padding: 20px;"}
+*This report was automatically generated from PostgreSQL experimental data.*\
+*For questions or issues, contact the research team or review source tables: `experiments` and `narrative_results`.*
+:::

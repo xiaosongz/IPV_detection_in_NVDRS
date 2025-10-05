@@ -4,8 +4,8 @@
 
 #' Mock LLM responses with various patterns
 #'
-#' @param pattern Response pattern: "default", "ipv_detected", "no_ipv", 
-#'   "high_confidence", "low_confidence", "error", "timeout", "malformed", 
+#' @param pattern Response pattern: "default", "ipv_detected", "no_ipv",
+#'   "high_confidence", "low_confidence", "error", "timeout", "malformed",
 #'   "missing_fields", "empty"
 #' @return Mocked LLM response list or error
 #' @export
@@ -28,7 +28,6 @@ mock_llm_response <- function(pattern = "default") {
         total_tokens = 200
       )
     ),
-    
     "no_ipv" = list(
       detected = FALSE,
       confidence = 0.92,
@@ -45,7 +44,6 @@ mock_llm_response <- function(pattern = "default") {
         total_tokens = 190
       )
     ),
-    
     "high_confidence" = list(
       detected = TRUE,
       confidence = 0.98,
@@ -54,7 +52,6 @@ mock_llm_response <- function(pattern = "default") {
       reasoning_steps = c("Step 1", "Step 2", "Step 3"),
       usage = list(prompt_tokens = 150, completion_tokens = 60, total_tokens = 210)
     ),
-    
     "low_confidence" = list(
       detected = TRUE,
       confidence = 0.35,
@@ -63,16 +60,12 @@ mock_llm_response <- function(pattern = "default") {
       reasoning_steps = c("Uncertain evidence", "Limited information"),
       usage = list(prompt_tokens = 140, completion_tokens = 40, total_tokens = 180)
     ),
-    
     "malformed" = '{"detected": true, "confidence": }', # Invalid JSON
-    
     "missing_fields" = list(
       detected = TRUE
       # Missing required fields
     ),
-    
     "empty" = list(),
-    
     "missing_usage" = list(
       detected = TRUE,
       confidence = 0.80,
@@ -81,18 +74,13 @@ mock_llm_response <- function(pattern = "default") {
       reasoning_steps = c("step 1")
       # No usage field
     ),
-    
     "error" = stop("API rate limit exceeded (429)"),
-    
     "timeout" = {
       Sys.sleep(0.1) # Small delay for testing
       stop("Request timeout")
     },
-    
     "auth_error" = stop("Authentication failed (401)"),
-    
     "server_error" = stop("Internal server error (500)"),
-    
     stop("Unknown mock pattern: ", pattern)
   )
 }
@@ -104,11 +92,11 @@ mock_llm_response <- function(pattern = "default") {
 #' @return Function that mocks call_llm
 #' @export
 mock_call_llm <- function(response_pattern = "default", delay = 0) {
-  function(user_prompt, system_prompt = NULL, model = NULL, 
+  function(user_prompt, system_prompt = NULL, model = NULL,
            temperature = NULL, max_tokens = NULL, ...) {
     # Simulate API delay
     if (delay > 0) Sys.sleep(delay)
-    
+
     # Return mocked response
     mock_llm_response(response_pattern)
   }
@@ -121,8 +109,8 @@ mock_call_llm <- function(response_pattern = "default", delay = 0) {
 #' @export
 mock_call_llm_rotating <- function(patterns = c("ipv_detected", "no_ipv")) {
   counter <- 0
-  
-  function(user_prompt, system_prompt = NULL, model = NULL, 
+
+  function(user_prompt, system_prompt = NULL, model = NULL,
            temperature = NULL, max_tokens = NULL, ...) {
     counter <<- counter + 1
     pattern <- patterns[(counter - 1) %% length(patterns) + 1]
@@ -165,7 +153,7 @@ mock_uuid_generate <- function(ids = NULL) {
     ids <- sprintf("test-uuid-%04d", 1:1000)
   }
   counter <- 0
-  
+
   function() {
     counter <<- counter + 1
     ids[counter]
@@ -180,32 +168,30 @@ mock_uuid_generate <- function(ids = NULL) {
 mock_config <- function(overrides = list()) {
   default_config <- list(
     experiment = list(
-      name = "test_experiment",
-      model_name = "test-model",
-      model_provider = "test",
+      name = "test_experiment"
+    ),
+    model = list(
+      name = "test-model",
+      provider = "test",
       temperature = 0.0,
-      max_tokens = 500,
-      api_url = "http://localhost:1234/v1/chat/completions",
-      run_seed = 42
+      api_url = "http://localhost:1234/v1/chat/completions"
+    ),
+    prompt = list(
+      version = "test-v1",
+      system_prompt = "You are an IPV detection system.",
+      user_template = "Analyze: <<TEXT>>"
     ),
     data = list(
-      file = "test_data.xlsx",
-      force_reload = FALSE,
+      file = "tests/fixtures/data/test_data.csv",
       max_narratives = 10
     ),
-    prompts = list(
-      system = "You are an IPV detection system.",
-      user_template = "Analyze: {text}",
-      version = "test-v1",
-      author = "test"
-    ),
-    output = list(
-      save_csv = FALSE,
-      save_json = FALSE,
-      log_level = "INFO"
+    run = list(
+      seed = 42,
+      save_incremental = TRUE,
+      save_csv_json = FALSE
     )
   )
-  
+
   # Apply overrides
   modifyList(default_config, overrides)
 }
@@ -218,14 +204,14 @@ mock_config <- function(overrides = list()) {
 #' @export
 mock_populated_db <- function(n_experiments = 3, n_results = 30) {
   con <- create_temp_db(initialize = TRUE)
-  
+
   # Add sample narratives
   load_sample_narratives(con)
-  
+
   # Add experiments
   for (i in 1:n_experiments) {
     exp_id <- sprintf("test-exp-%03d", i)
-    
+
     DBI::dbExecute(con, "
       INSERT INTO experiments (
         experiment_id, experiment_name, status,
@@ -248,7 +234,7 @@ mock_populated_db <- function(n_experiments = 3, n_results = 30) {
       0.80,
       0.825
     ))
-    
+
     # Add results for this experiment
     n_per_exp <- n_results %/% n_experiments
     for (j in 1:n_per_exp) {
@@ -260,7 +246,7 @@ mock_populated_db <- function(n_experiments = 3, n_results = 30) {
       ", params = list(
         exp_id,
         sprintf("INC-%05d", j),
-        j %% 2,  # Alternate detected
+        j %% 2, # Alternate detected
         0.7 + runif(1) * 0.3,
         "test indicators",
         "test rationale",
@@ -270,7 +256,7 @@ mock_populated_db <- function(n_experiments = 3, n_results = 30) {
       ))
     }
   }
-  
+
   return(con)
 }
 
@@ -297,7 +283,7 @@ mock_httr2_response <- function(status_code = 200, body = NULL) {
       )
     )
   }
-  
+
   # Create a simple response object
   structure(
     list(
