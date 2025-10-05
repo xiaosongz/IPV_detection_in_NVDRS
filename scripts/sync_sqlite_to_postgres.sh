@@ -126,7 +126,7 @@ if full_refresh:
         cur.execute("DROP TABLE IF EXISTS experiments")
 
 else:
-    print("⚡ INCREMENTAL mode: UPSERT all rows (no DROP/CREATE, indexes preserved)")
+    print("⚡ INCREMENTAL mode: using UPSERT for existing tables")
 
 # Create tables if they don't exist (idempotent)
 with pconn.cursor() as cur:
@@ -362,7 +362,7 @@ upsert_result = """
 """
 
 # Stream and sync source_narratives
-print("📥 Syncing source_narratives (UPSERT all rows)...")
+print("📥 Syncing source_narratives...")
 source_count = 0
 with pconn.cursor() as cur:
     for batch in stream_batches(sconn, "SELECT * FROM source_narratives", batch_size):
@@ -371,20 +371,20 @@ with pconn.cursor() as cur:
         if source_count % 10000 == 0:
             print(f"   ... {source_count} rows processed")
 pconn.commit()
-print(f"✓ source_narratives: {source_count} rows processed")
+print(f"✓ source_narratives: {source_count} rows synced")
 
 # Stream and sync experiments
-print("📥 Syncing experiments (UPSERT all rows)...")
+print("📥 Syncing experiments...")
 experiment_count = 0
 with pconn.cursor() as cur:
     for batch in stream_batches(sconn, "SELECT * FROM experiments", batch_size):
         cur.executemany(upsert_experiment, batch)
         experiment_count += len(batch)
 pconn.commit()
-print(f"✓ experiments: {experiment_count} rows processed")
+print(f"✓ experiments: {experiment_count} rows synced")
 
 # Stream and sync narrative_results
-print("📥 Syncing narrative_results (UPSERT all rows)...")
+print("📥 Syncing narrative_results...")
 result_count = 0
 with pconn.cursor() as cur:
     for batch in stream_batches(sconn, "SELECT * FROM narrative_results", batch_size):
@@ -393,7 +393,7 @@ with pconn.cursor() as cur:
         if result_count % 10000 == 0:
             print(f"   ... {result_count} rows processed")
 pconn.commit()
-print(f"✓ narrative_results: {result_count} rows processed")
+print(f"✓ narrative_results: {result_count} rows synced")
 
 # Optional: delete orphaned rows in Postgres that don't exist in SQLite
 if delete_orphans and not full_refresh:
@@ -532,9 +532,8 @@ if not full_refresh:
         abs(src_after - src_before)
     ])
     total_processed = experiment_count + result_count + source_count
-    print("\n⚡ Incremental mode: Processed {} rows, {} actually changed/inserted".format(
+    print("\n⚡ Incremental sync: processed {} rows, {} actually changed/inserted".format(
         total_processed, actual_changes))
-    print("   Note: All rows are UPSERTed; PostgreSQL skips unchanged rows internally")
 else:
     print("\n🔄 Full refresh completed")
 
