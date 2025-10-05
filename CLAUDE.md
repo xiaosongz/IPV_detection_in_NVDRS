@@ -12,19 +12,26 @@ detect_ipv("text") → {detected: TRUE/FALSE, confidence: 0-1}
 
 Config-driven experiment harness with SQLite/PostgreSQL storage, reproducible runs, and automated metrics reporting.
 
+## Project Type
+
+**Research Compendium** - Not a loadable R package. Scripts use `source()` to load functions from `R/`. Focus is reproducibility for publication, not distribution. Will be published as supplementary materials to paper.
+
+**Current Stage:** Testing phase with 404 narratives across different prompts/models. Planning production run with 60k narratives once optimal configuration identified.
+
+**Publication Goal:** Peer-reviewed paper with this repository as supplementary materials. Repository structure designed for reviewers to reproduce all findings.
+
 ## Architecture
 
-**Three Layers:**
-1. **Core detection** (`docs/ULTIMATE_CLEAN.R`) - Minimal single-function implementation
-2. **Production package** (`R/`) - Modular functions: LLM calls, parsing, metrics, DB access, experiment logging
-3. **Experiment harness** (`scripts/run_experiment.R`) - YAML-driven orchestration with full workflow tracking
+**Two Layers:**
+1. **Modular functions** (`R/`) - LLM calls, parsing, metrics, DB access, experiment logging (one function per file)
+2. **Experiment orchestration** (`scripts/run_experiment.R`) - YAML-driven workflow with full tracking
 
 **Database Schema:**
 - `experiments` table: config, metrics (F1, precision, recall), timestamps
 - `narratives` table: per-record results, predictions, token usage
 - SQLite primary (`data/experiments.db`), Postgres mirror for dashboards
 
-**Key Design Principle:** Unix philosophy - do one thing well. Users control loops, parallelization, error handling. Package provides minimal building blocks.
+**Key Design Principle:** Unix philosophy - do one thing well. Scripts control loops, parallelization, error handling. R functions are minimal building blocks.
 
 ## Common Commands
 
@@ -66,31 +73,34 @@ Rscript -e "
 "
 ```
 
-### R Package Development
+### Documentation
 ```bash
-# Load package in dev mode
-Rscript -e "devtools::load_all()"
-
-# Run package checks
-Rscript -e "devtools::check()"
-
-# Generate documentation
+# Generate roxygen documentation (optional - for completeness)
 Rscript -e "devtools::document()"
+
+# Note: Functions are accessed via source(), not library()
+# Roxygen docs kept for reference and potential future package conversion
 ```
 
 ## File Organization
 
-- `R/` - Production functions (one function per file, modular)
+- `R/` - Modular functions (one function per file, sourced by scripts)
 - `R/legacy/` - Archived code (reference only, don't modify)
-- `docs/ULTIMATE_CLEAN.R` - Minimal reference implementation
 - `configs/experiments/` - YAML experiment definitions
 - `configs/prompts/` - External prompt templates
-- `scripts/` - CLI entry points (run_experiment.R, sync scripts)
-- `tests/testthat/` - Unit tests
+- `scripts/` - Entry points (run_experiment.R, sync scripts, analysis)
+- `tests/testthat/` - Unit tests (207 tests)
 - `tests/integration/` - Integration tests
 - `data/experiments.db` - SQLite database (git-ignored)
-- `benchmark_results/` - CSV/JSON exports
+- `docs/` - Documentation files (use `YYYYMMDD-` prefix for all new docs)
+- `docs/analysis/` - Analysis notebooks and reports
+- `benchmark_results/` - CSV/JSON exports (git-ignored)
 - `logs/experiments/` - Per-run logs (git-ignored)
+
+**File Naming Convention:**
+- Documentation files: `YYYYMMDD-description.md` (e.g., `20251005-publication_readiness_plan.md`)
+- Analysis reports: `YYYYMMDD-report_name.Rmd/html`
+- Experiment configs: `exp_NNN_description.yaml`
 
 ## Development Rules
 
@@ -104,6 +114,7 @@ Rscript -e "devtools::document()"
 - NO PARTIAL IMPLEMENTATION - finish what you start
 - NO CODE DUPLICATION - check existing codebase, reuse functions
 - NO DEAD CODE - delete unused code completely
+- NO INCONSISTENT NAMING - read existing codebase naming patterns
 - IMPLEMENT TEST FOR EVERY FUNCTION
 - NO CHEATER TESTS - tests must reveal flaws, be verbose for debugging
 - NO OVER-ENGINEERING - simple functions over abstractions
@@ -118,11 +129,15 @@ Rscript -e "devtools::document()"
 
 ## Agent Usage (Context Optimization)
 
+**Think carefully and implement the most concise solution that changes as little code as possible.**
+
 **Always use specialized agents:**
 
-1. **file-analyzer** - For reading log files and verbose outputs
-2. **code-analyzer** - For code search, bug research, logic tracing
-3. **test-runner** - For running tests and analyzing results
+1. **file-analyzer** - For reading log files and verbose outputs. Provides concise, actionable summaries while dramatically reducing context usage.
+
+2. **code-analyzer** - For code search, bug research, and logic tracing. Expert in code analysis and vulnerability detection.
+
+3. **test-runner** - For running tests and analyzing results. Ensures full test output is captured for debugging while keeping main conversation clean. No approval dialogs interrupt the workflow.
 
 Using agents keeps main conversation clean and optimizes context usage.
 
@@ -160,7 +175,12 @@ Main branch for PRs: `master`
 ## Tone
 
 - Be concise, direct, skeptical
-- Criticize freely - point out mistakes or better approaches
+- Criticism is welcome - point out mistakes or better approaches
+- Tell me if there's a relevant standard or convention I'm unaware of
 - Ask questions when intent is unclear - don't guess
 - No flattery, no compliments unless specifically requested
 - Occasional pleasantries are fine
+
+## Publication Readiness
+
+See `docs/20251005-publication_readiness_plan.md` for detailed plan to prepare this repository for publication as supplementary materials to peer-reviewed paper.
