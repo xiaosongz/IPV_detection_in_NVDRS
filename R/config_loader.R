@@ -4,6 +4,21 @@
 #'
 #' @param config_path Path to YAML config file
 #' @return List with experiment configuration
+#'
+#' @examples
+#' \dontrun{
+#' # Load experiment configuration
+#' config <- load_experiment_config("configs/experiments/exp_037_baseline_v4_t00_medium.yaml")
+#'
+#' # Access configuration sections
+#' cat("Experiment name:", config$experiment$name, "\n")
+#' cat("Model:", config$model$name, "\n")
+#' cat("Temperature:", config$model$temperature, "\n")
+#'
+#' # Validate configuration
+#' validate_config(config)
+#' }
+#'
 #' @export
 load_experiment_config <- function(config_path) {
   if (!requireNamespace("yaml", quietly = TRUE)) {
@@ -32,6 +47,20 @@ load_experiment_config <- function(config_path) {
 #'
 #' @param config Configuration list from load_experiment_config()
 #' @return TRUE if valid, stops with error otherwise
+#'
+#' @examples
+#' \dontrun{
+#' # Load and validate configuration
+#' config <- load_experiment_config("configs/experiments/exp_037_baseline_v4_t00_medium.yaml")
+#' validate_config(config) # Will stop if invalid
+#'
+#' # Check specific validation rules
+#' # - Temperature must be between 0.0 and 2.0
+#' # - Model name must be specified
+#' # - Data file must exist
+#' # - Required sections must be present
+#' }
+#'
 #' @export
 validate_config <- function(config) {
   # Check required top-level sections

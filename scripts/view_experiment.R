@@ -1,15 +1,93 @@
 #!/usr/bin/env Rscript
-#' View Experiment Details
-#' 
-#' Display comprehensive details about an experiment from the database
-#' 
-#' Usage:
-#'   Rscript scripts/view_experiment.R <experiment_id>
-#'   Rscript scripts/view_experiment.R latest
-#'   
-#' Examples:
-#'   Rscript scripts/view_experiment.R 60376368-2f1b-4b08-81a9-2f0ea815cd21
-#'   Rscript scripts/view_experiment.R latest
+
+#' View Experiment Details and Results
+#'
+#' Display comprehensive details about completed experiments from the database.
+#' This is the primary tool for examining experiment results, metrics, and
+#' performance statistics.
+#'
+#' @description
+#' This script provides detailed analysis of experiment results including:
+#' 1. Experiment configuration and metadata
+#' 2. Performance metrics (accuracy, precision, recall, F1)
+#' 3. Confusion matrix and prediction distribution
+#' 4. Confidence score analysis
+#' 5. Error case breakdown and examples
+#' 6. Processing statistics and timing information
+#' 7. Token usage and cost tracking
+#'
+#' @param experiment_id Experiment identifier (command line argument)
+#'   - Can be full UUID (e.g., "60376368-2f1b-4b08-81a9-2f0ea815cd21")
+#'   - Can be experiment name (e.g., "demo_synthetic_test")
+#'   - Use "latest" for most recent experiment
+#'   - Omit for list of recent experiments
+#'
+#' @return
+#' Console output with comprehensive experiment analysis. Optional CSV export
+#' of detailed results.
+#'
+#' @examples
+#' \dontrun{
+#' # View specific experiment by ID
+#' Rscript scripts/view_experiment.R 60376368-2f1b-4b08-81a9-2f0ea815cd21
+#'
+#' # View specific experiment by name
+#' Rscript scripts/view_experiment.R demo_synthetic_test
+#'
+#' # View most recent experiment
+#' Rscript scripts/view_experiment.R latest
+#'
+#' # List all experiments
+#' Rscript scripts/view_experiment.R
+#' }
+#'
+#' @section Output Sections:
+#' 1. **Experiment Overview**: Name, model, configuration, timestamps
+#' 2. **Performance Metrics**: Accuracy, precision, recall, F1 score
+#' 3. **Confusion Matrix**: TP, TN, FP, FN counts and rates
+#' 4. **Prediction Distribution**: Counts and percentages by prediction type
+#' 5. **Confidence Analysis**: Mean confidence by prediction accuracy
+#' 6. **Error Examples**: Sample false positives and false negatives
+#' 7. **Processing Statistics**: Runtime, throughput, token usage
+#' 8. **Database Information**: Record counts and storage details
+#'
+#' @section Dependencies:
+#' - R packages: DBI, RSQLite, here
+#' - Functions: db_config.R, db_schema.R
+#' - Database: experiments.db (must exist)
+#'
+#' @section Error Handling:
+#' - Graceful handling of missing experiments
+#' - Database connection retry logic
+#' - Validation of experiment IDs and formats
+#' - Clear error messages with troubleshooting hints
+#'
+#' @section Export Options:
+#' Set environment variable EXPORT_RESULTS=1 to save detailed results to CSV:
+#' ```bash
+#' EXPORT_RESULTS=1 Rscript scripts/view_experiment.R <experiment_id>
+#' ```
+#'
+#' @author Research Team
+#' @date 2025-10-05
+#' @version 1.0 (Research Compendium)
+#'
+#' @seealso
+#' - \code{\link{run_experiment.R}} for running experiments
+#' - \code{\link{demo_workflow.R}} for quick demonstration
+#' - \code{R/experiment_queries.R} for database query functions
+#'
+#' @references
+#' - Database schema: docs/20251005-database_schema.md
+#' - Metrics definitions: docs/20251005-publication_task_list.md
+#'
+#' @note
+#' This script only reads from the database and cannot modify experiment data.
+#' It's safe to run multiple times without affecting results.
+#'
+#' @warning
+#' Large experiments (>10,000 narratives) may take several seconds to load
+#' and analyze. Consider using max_narratives parameter for quick previews.
 
 library(DBI)
 library(RSQLite)
@@ -23,10 +101,10 @@ if (length(args) == 0) {
   cat("Usage: Rscript scripts/view_experiment.R <experiment_id|latest>\n")
   cat("\nRecent experiments:\n")
   con <- get_db_connection()
-  recent <- dbGetQuery(con, 
-    "SELECT experiment_id, experiment_name, model_name, status, start_time 
-     FROM experiments 
-     ORDER BY start_time DESC 
+  recent <- dbGetQuery(con,
+    "SELECT experiment_id, experiment_name, model_name, status, start_time
+     FROM experiments
+     ORDER BY start_time DESC
      LIMIT 10"
   )
   dbDisconnect(con)
@@ -41,7 +119,7 @@ con <- get_db_connection()
 
 # Handle "latest" keyword
 if (tolower(exp_id) == "latest") {
-  latest <- dbGetQuery(con, 
+  latest <- dbGetQuery(con,
     "SELECT experiment_id FROM experiments ORDER BY start_time DESC LIMIT 1"
   )
   if (nrow(latest) == 0) {
@@ -54,7 +132,7 @@ if (tolower(exp_id) == "latest") {
 }
 
 # Query experiment
-exp <- dbGetQuery(con, 
+exp <- dbGetQuery(con,
   "SELECT * FROM experiments WHERE experiment_id = ?",
   params = list(exp_id)
 )
@@ -62,10 +140,10 @@ exp <- dbGetQuery(con,
 if (nrow(exp) == 0) {
   cat("No experiment found with ID:", exp_id, "\n")
   cat("\nRecent experiments:\n")
-  recent <- dbGetQuery(con, 
-    "SELECT experiment_id, experiment_name, model_name, status, start_time 
-     FROM experiments 
-     ORDER BY start_time DESC 
+  recent <- dbGetQuery(con,
+    "SELECT experiment_id, experiment_name, model_name, status, start_time
+     FROM experiments
+     ORDER BY start_time DESC
      LIMIT 5"
   )
   print(recent)

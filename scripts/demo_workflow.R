@@ -2,23 +2,100 @@
 
 #' Demo Workflow for IPV Detection
 #'
-#' Quick demonstration script for reviewers to test the system
-#' without requiring NVDRS access or API keys.
+#' Quick demonstration script for reviewers to test the complete system
+#' without requiring NVDRS data access or API keys. This is the primary
+#' entry point for peer reviewers and new users.
 #'
-#' This script:
-#' 1. Uses synthetic data (no sensitive information)
-#' 2. Runs a small sample (10 narratives)
-#' 3. Completes in <5 minutes
-#' 4. Demonstrates full workflow
-#' 5. Generates basic metrics
+#' @description
+#' This script demonstrates the end-to-end IPV detection workflow:
+#' 1. Loads synthetic example data (30 realistic suicide narratives)
+#' 2. Initializes a fresh demonstration database
+#' 3. Creates a complete experiment configuration
+#' 4. Processes a small sample (10 narratives) using LLM or mock mode
+#' 5. Stores results with proper logging and metrics
+#' 6. Generates basic performance statistics
+#' 7. Provides comprehensive output for validation
 #'
-#' Usage:
-#'   Rscript scripts/demo_workflow.R
+#' @details
+#' The demo is designed to work in two modes:
+#' - **Mock Mode** (default): No API keys required, uses simulated responses
+#' - **Live Mode**: Requires API keys, makes real LLM calls
 #'
-#' Requirements:
-#'   - .env file configured (copy from .env.example)
-#'   - renv dependencies installed (run: renv::restore())
-#'   - Internet connection for LLM API calls
+#' The synthetic data contains balanced examples:
+#' - 15 IPV-positive cases (various abuse types)
+#' - 15 IPV-negative cases (accidents, natural causes, mental health)
+#' - Realistic narrative complexity and ambiguity
+#'
+#' @return
+#' Invisible list containing:
+#' - experiment_id: Unique identifier for the demo run
+#' - database_path: Path to demo database file
+#' - metrics: Basic performance statistics
+#' - sample_results: First few prediction examples
+#'
+#' @examples
+#' \dontrun{
+#' # Run demo with mock responses (no API keys needed)
+#' Rscript scripts/demo_workflow.R
+#'
+#' # After configuring .env with API keys, run live demo
+#' Rscript scripts/demo_workflow.R
+#'
+#' # View demo results
+#' Rscript scripts/view_experiment.R demo_synthetic_test
+#' }
+#'
+#' @section Dependencies:
+#' - R packages: DBI, RSQLite, tictoc, here, dotenv
+#' - Functions sourced from: R/ directory (modular architecture)
+#' - Data: data/synthetic_narratives.csv (included)
+#' - Optional: LLM API keys (configured in .env)
+#'
+#' @section Demo Database:
+#' Creates isolated database: data/demo_experiments.db
+#' - Clean slate for each run (removes existing demo database)
+#' - Complete schema with experiments, narrative_results, source_narratives
+#' - Safe for multiple demo runs without affecting production data
+#'
+#' @section Performance Expectations:
+#' - Mock Mode: 2-3 minutes (no API calls)
+#' - Live Mode: 5-10 minutes (depends on API response time)
+#' - Memory usage: <100MB for synthetic data
+#' - Disk usage: <5MB for demo database
+#'
+#' @section Output Files:
+#' - data/demo_experiments.db: SQLite database with results
+#' - Console output: Progress updates and metrics
+#' - Logs: data/demo_experiments.db/logs/ (if errors occur)
+#'
+#' @section Error Handling:
+#' - Graceful fallback to mock mode if API keys missing
+#' - Comprehensive error messages and troubleshooting hints
+#' - Database cleanup on critical failures
+#' - Progress reporting for debugging
+#'
+#' @author Research Team
+#' @date 2025-10-05
+#' @version 1.0 (Research Compendium)
+#'
+#' @seealso
+#' - \code{\link{run_experiment.R}} for production experiments
+#' - \code{\link{view_experiment.R}} for results visualization
+#' - \code{data/synthetic_narratives.csv} for example data
+#'
+#' @references
+#' - Research compendium best practices
+#' - Synthetic data generation methodology
+#' - IPV detection clinical guidelines
+#'
+#' @note
+#' This demo is specifically designed for reviewer accessibility and
+#' validation. It does not require any restricted data or special
+#' permissions to run successfully.
+#'
+#' @warning
+#' The mock mode uses simplified logic for demonstration purposes.
+#' For research validation, use live mode with real API calls.
 
 library(here)
 library(DBI)

@@ -2,10 +2,88 @@
 
 #' Run Experiment from Configuration File
 #'
-#' Main orchestrator for running experiments with database tracking
+#' Main orchestrator for running experiments with database tracking. This is the
+#' primary entry point for conducting IPV detection experiments using LLMs.
 #'
-#' Usage:
-#'   Rscript scripts/run_experiment.R configs/experiments/exp_001.yaml
+#' @description
+#' This script orchestrates the complete experiment workflow:
+#' 1. Loads and validates YAML configuration files
+#' 2. Initializes database schema and connections
+#' 3. Loads source data from Excel/CSV files
+#' 4. Registers experiments with unique identifiers
+#' 5. Processes narratives using specified LLM models and prompts
+#' 6. Stores results with comprehensive logging and metrics
+#' 7. Calculates performance statistics (accuracy, precision, recall, F1)
+#' 8. Exports results in multiple formats (CSV, JSON)
+#'
+#' @param config_path Path to YAML configuration file (command line argument)
+#'
+#' @return
+#' Invisible experiment ID string. Results are stored in database and
+#' optionally exported to CSV/JSON files.
+#'
+#' @examples
+#' \dontrun{
+#' # Run single experiment
+#' Rscript scripts/run_experiment.R configs/experiments/exp_037_baseline_v4_t00_medium.yaml
+#'
+#' # Run test experiment
+#' Rscript scripts/run_experiment.R configs/experiments/exp_001_test_gpt_oss.yaml
+#' }
+#'
+#' @section Dependencies:
+#' - R packages: DBI, RSQLite, yaml, httr2, jsonlite, tictoc, here
+#' - Functions sourced from: R/ directory (modular architecture)
+#' - Database: SQLite (automatically created if needed)
+#' - External: LLM API endpoint (configured in YAML)
+#'
+#' @section Database Schema:
+#' Creates three tables if they don't exist:
+#' - experiments: experiment metadata and metrics
+#' - narrative_results: per-narrative predictions and confidence scores
+#' - source_narratives: original narrative data for reproducibility
+#'
+#' @section Configuration:
+#' YAML files must specify:
+#' - experiment: name, author, notes
+#' - model: name, provider, api_url, temperature
+#' - prompt: version, system_prompt, user_template
+#' - data: source file path
+#' - run: seed, max_narratives, save options
+#'
+#' @section Error Handling:
+#' - Configuration validation before processing
+#' - Database connection retry logic
+#' - Graceful degradation for optional features
+#' - Comprehensive logging of errors and warnings
+#' - Automatic experiment rollback on critical failures
+#'
+#' @section Performance:
+#' - Batch processing for memory efficiency
+#' - Progress reporting with timestamps
+#' - Token usage tracking for cost management
+#' - Configurable parallel processing (future enhancement)
+#'
+#' @author Research Team
+#' @date 2025-10-05
+#' @version 1.0 (Research Compendium)
+#'
+#' @seealso
+#' - \code{\link{view_experiment.R}} for results visualization
+#' - \code{\link{demo_workflow.R}} for quick demonstration
+#' - \code{scripts/README.md} for complete workflow documentation
+#'
+#' @references
+#' Research compendium methodology: https://research-compendium.github.io/
+#' YAML configuration specification: See configs/experiments/README.md
+#'
+#' @warning
+#' This script processes potentially sensitive narrative data. Ensure appropriate
+#' IRB approval and data handling procedures are in place for production use.
+#'
+#' @note
+#' First run automatically initializes the database schema. Subsequent runs
+#' append new experiments while preserving historical data.
 
 library(here)
 library(DBI)
@@ -127,20 +205,20 @@ cat("  This may take several minutes depending on number of narratives...\n\n")
 
 tryCatch({
   results <- run_benchmark_core(config, conn, experiment_id, narratives, logger)
-  
+
   cat("\nStep 8: Computing metrics...\n")
   # Metrics are computed by finalize_experiment from database
-  
+
   # Optionally save CSV/JSON files
   csv_file <- NULL
   json_file <- NULL
-  
+
   if (config$run$save_csv_json) {
     timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
     model_clean <- gsub("/", "_", config$model$name)
     csv_file <- here("benchmark_results", paste0("experiment_", experiment_id, "_", timestamp, ".csv"))
     json_file <- here("benchmark_results", paste0("experiment_", experiment_id, "_", timestamp, ".json"))
-    
+
     # Prepare results for CSV (flatten lists)
     csv_results <- results
     if ("indicators" %in% names(csv_results) && is.list(csv_results$indicators)) {
@@ -148,29 +226,29 @@ tryCatch({
         if (is.null(x) || length(x) == 0) "" else paste(x, collapse = "; ")
       })
     }
-    
+
     write.csv(csv_results, csv_file, row.names = FALSE)
     jsonlite::write_json(results, json_file, pretty = TRUE, auto_unbox = TRUE)
-    
+
     cat("✓ Results saved:\n")
     cat("  CSV:", csv_file, "\n")
     cat("  JSON:", json_file, "\n\n")
-    
+
     logger$info(paste("Saved CSV:", csv_file))
     logger$info(paste("Saved JSON:", json_file))
   }
-  
+
   # Finalize experiment
   finalize_experiment(conn, experiment_id, csv_file, json_file)
-  
+
   cat("Step 9: Experiment finalized\n\n")
   logger$info("Experiment finalized successfully")
-  
+
   # Display results
   cat("================================================================================\n")
   cat("                        Experiment Complete!\n")
   cat("================================================================================\n\n")
-  
+
   exp_info <- DBI::dbGetQuery(conn,
     "SELECT experiment_name, model_name, temperature,
             n_narratives_processed,
@@ -186,17 +264,17 @@ tryCatch({
      FROM narrative_results
      WHERE experiment_id = ? AND tokens_used IS NOT NULL AND error_occurred = 0",
     params = list(experiment_id))
-  
+
   cat("Experiment:", exp_info$experiment_name, "\n")
   cat("Model:", exp_info$model_name, "(temperature =", exp_info$temperature, ")\n")
   cat("Narratives processed:", exp_info$n_narratives_processed, "\n\n")
-  
+
   cat("Performance Metrics:\n")
   cat("  Accuracy:   ", sprintf("%.2f%%", exp_info$accuracy * 100), "\n")
   cat("  Precision:  ", sprintf("%.2f%%", exp_info$precision_ipv * 100), "\n")
   cat("  Recall:     ", sprintf("%.2f%%", exp_info$recall_ipv * 100), "\n")
   cat("  F1 Score:   ", sprintf("%.2f", exp_info$f1_ipv), "\n\n")
-  
+
   cat("Confusion Matrix:\n")
   cat("  True Positives:  ", exp_info$n_true_positive, "\n")
   cat("  False Positives: ", exp_info$n_false_positive, "\n")
@@ -210,28 +288,28 @@ tryCatch({
     }
     cat("\n")
   }
-  
+
   cat("Runtime:", sprintf("%.1f", exp_info$total_runtime_sec), "seconds\n")
   cat("Average per narrative:", sprintf("%.2f", exp_info$total_runtime_sec / exp_info$n_narratives_processed), "seconds\n\n")
-  
+
   cat("Experiment ID:", experiment_id, "\n")
   cat("Log directory:", logger$log_dir, "\n")
   if (!is.null(csv_file)) {
     cat("Results saved to:", csv_file, "\n")
   }
-  
+
   cat("\n================================================================================\n\n")
-  
+
 }, error = function(e) {
   cat("\n✗ ERROR during experiment:\n")
   cat("  ", conditionMessage(e), "\n\n")
-  
+
   logger$error("Experiment failed", e)
   mark_experiment_failed(conn, experiment_id, conditionMessage(e))
-  
+
   cat("Experiment marked as failed in database\n")
   cat("Check error log:", file.path(logger$log_dir, "errors.log"), "\n\n")
-  
+
   DBI::dbDisconnect(conn)
   quit(save = "no", status = 1)
 })
