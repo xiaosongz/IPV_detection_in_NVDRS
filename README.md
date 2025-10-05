@@ -1,320 +1,117 @@
-# IPV Detection in NVDRS Using LLM APIs
+# IPV Detection Experiment Harness
 
-A minimal function that detects intimate partner violence in death narratives. That's it.
+This repository packages our LLM-based IPV detection workflows: reproducible prompt experiments, a structured
+SQLite/PostgreSQL store, and reporting utilities for NVDRS suicide narratives.
 
----
+## Feature Highlights
 
-## 🚀 Quick Start
+- **Config-driven runs.** YAML files under `configs/experiments/` define model, prompt, dataset, and runtime
+  options. No code edits needed to try new prompts.
+- **Structured logging.** Each run writes narrative-level results, token usage, and confusion-matrix flags to
+  `data/experiments.db`. Logs live in `logs/experiments/<experiment_id>/`.
+- **One-command orchestration.** `scripts/run_experiment.R` handles data loading, experiment registration,
+  LLM calls, exports, and summary stats (F1, precision, recall, accuracy).
+- **PostgreSQL mirror.** `scripts/sync_sqlite_to_postgres.sh` copies the SQLite results into a remote Postgres
+  instance for shared dashboards or ad-hoc SQL analysis.
+- **Prompt comparison reports.** Completed-run metrics (ranked by F1) are published in
+  `docs/20251004-experiment_results_report.md`.
 
-**Get running in 5 minutes**: See [docs/QUICK_START.md](docs/QUICK_START.md) ⭐
+## Repository Layout
 
-**TL;DR**:
-```bash
-# 1. Install packages
-Rscript -e "install.packages(c('here','DBI','RSQLite','yaml','readxl','dplyr','httr2','jsonlite'))"
-
-# 2. Copy config (edit if needed)
-cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/test.yaml
-
-# 3. Run
-Rscript scripts/run_experiment.R configs/experiments/test.yaml
+```
+R/                      # Production R functions (LLM calls, parsing, metrics, DB access)
+R/legacy/               # Archived pre-refactor helpers (kept for reference)
+configs/experiments/    # YAML experiment definitions (prompt + model sweeps)
+configs/prompts/        # External prompt text snippets (optional)
+data/experiments.db     # Primary SQLite store (git-ignored)
+benchmark_results/      # CSV/JSON exports produced by past experiments
+logs/experiments/       # Run-specific log directories (git-ignored, structure kept for reference)
+docs/                   # Plans, status reports, analysis notebooks, generated summaries
+scripts/                # CLI utilities (run_experiment.R, sync_sqlite_to_postgres.sh, canned batches)
+tests/                  # Manual and automated test harnesses
 ```
 
-**Done!** Results in `data/experiments.db`, logs in `logs/experiments/`.
-
----
-
-## What This Is
-
-One function (`detect_ipv`) that sends text to an LLM and gets back IPV detection results. No magic, no complexity, just a simple API call wrapped in error handling.
-
-## What This Is NOT
-
-- NOT a complex R package with 50 dependencies
-- NOT an abstraction layer that hides what's happening
-- NOT a framework that dictates your workflow
-- NOT a solution looking for a problem
-
-## The Entire Implementation
-
-```r
-detect_ipv <- function(text, config = NULL) {
-  # Default config
-  if (is.null(config)) {
-    config <- list(
-      api_url = Sys.getenv("LLM_API_URL", "http://192.168.10.22:1234/v1/chat/completions"),
-      model = Sys.getenv("LLM_MODEL", "openai/gpt-oss-120b")
-    )
-  }
-  
-  # Empty input = empty output
-  if (is.null(text) || is.na(text) || trimws(text) == "") {
-    return(list(detected = NA, confidence = 0))
-  }
-  
-  # Call API
-  tryCatch({
-    response <- httr2::request(config$api_url) |>
-      httr2::req_body_json(list(
-        model = config$model,
-        messages = list(list(role = "user", content = text))
-      )) |>
-      httr2::req_perform() |>
-      httr2::resp_body_json()
-    
-    jsonlite::fromJSON(response$choices[[1]]$message$content)
-  }, error = function(e) {
-    list(detected = NA, confidence = 0, error = e$message)
-  })
-}
-```
-
-That's the whole thing. Minimal and clean. Done.
-
-## Installation? Copy the Function
-
-```r
-# Step 1: Copy the detect_ipv function from above
-# Step 2: Install dependencies
-install.packages(c("httr2", "jsonlite"))
-# Step 3: There is no step 3
-```
-
-## Setup
-
-```r
-# Point to your LLM
-Sys.setenv(LLM_API_URL = "http://192.168.10.22:1234/v1/chat/completions")
-Sys.setenv(LLM_MODEL = "openai/gpt-oss-120b")
-```
-
-## Usage
-
-```r
-# Single narrative
-result <- detect_ipv("Husband shot wife during argument")
-print(result$detected)  # TRUE or FALSE
-
-# Batch processing (YOU control the loop)
-data <- readxl::read_excel("your_data.xlsx")
-data$ipv <- lapply(data$narrative, detect_ipv)
-
-# Parallel? Your choice
-library(parallel)
-results <- mclapply(narratives, detect_ipv, mc.cores = 4)
-
-# Custom prompt? Pass config
-my_config <- list(
-  api_url = "http://your-llm/v1/chat/completions",
-  model = "your-model"
-)
-result <- detect_ipv(text, my_config)
-```
-
-That's it. No frameworks. No abstractions. Just a function call.
-
-## Input/Output
-
-You give it text. It returns:
-```r
-list(
-  detected = TRUE/FALSE,
-  confidence = 0.0-1.0,
-  error = "message if failed"
-)
-```
-
-## Optional: Storage & Experiment Tracking
-
-The minimal `detect_ipv` function works standalone. But if you want to store results, track experiments, or analyze performance, there are optional storage utilities.
-
-### Quick Storage (SQLite)
-
-```r
-# Process and store results locally
-source("R/0_setup.R")
-
-response <- call_llm("narrative text", "system prompt")
-parsed <- parse_llm_result(response, narrative_id = "case_123")
-
-# Store in local SQLite database (auto-creates schema)
-conn <- get_db_connection("results.db")
-store_llm_result(parsed, conn)
-close_db_connection(conn)
-
-# Batch processing with storage
-results <- store_llm_results_batch(parsed_results, db_path = "results.db")
-```
-
-### Production Storage (PostgreSQL)
-
-```r
-# Scale to PostgreSQL for production workloads
-# Create .env file with: POSTGRES_HOST, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
-
-conn <- connect_postgres()
-store_llm_result(parsed, conn)
-
-# Batch processing: ~250-500 records/second over network
-batch_result <- store_llm_results_batch(parsed_results, conn = conn, chunk_size = 5000)
-close_db_connection(conn)
-```
-
-### Experiment Tracking (R&D)
-
-```r
-# Track prompt experiments and compare performance
-conn <- get_db_connection("experiments.db")
-ensure_experiment_schema(conn)
-
-# Register prompt versions
-v1_id <- register_prompt(conn, "You are an IPV detector", "Analyze: {{narrative}}")
-v2_id <- register_prompt(conn, "You are a forensic analyst", "Detect IPV in: {{narrative}}")
-
-# A/B test different prompts
-results <- ab_test_prompts(conn, v1_id, v2_id, test_narratives)
-print(results$comparison)  # Shows performance metrics
-
-close_db_connection(conn)
-```
-
-### Feature Comparison
-
-| Feature | SQLite (Local) | PostgreSQL (Production) |
-|---------|----------------|-------------------------|
-| Setup | Zero config | Environment variables |
-| Performance | 50-200/sec | 250-500/sec (network) |
-| Concurrent users | Single user | Multi-user |
-| Storage limit | Disk space | Server capacity |
-| Best for | Development, analysis | Production, teams |
-
-### Documentation
-
-- **Storage Guide**: `docs/RESULT_STORAGE_GUIDE.md` - Comprehensive storage examples
-- **SQLite Setup**: `docs/SQLITE_SETUP.md` - Local development setup  
-- **PostgreSQL Setup**: `docs/POSTGRESQL_SETUP.md` - Production deployment
-- **Troubleshooting**: `docs/TROUBLESHOOTING.md` - Common issues and solutions
-- **Experiments**: `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization
-
-Or don't use any of this. The minimal `detect_ipv` function works perfectly standalone.
-
-## Key Files
-
-### Core Implementation
-- `docs/ULTIMATE_CLEAN.R` - The minimal version. Use this.
-- `docs/CLEAN_IMPLEMENTATION.R` - Extended version with batching if you need it.
-
-### Documentation
-- `docs/RESULT_STORAGE_GUIDE.md` - Storage and experiment tracking (optional)
-- `docs/SQLITE_SETUP.md` - Local development with SQLite (zero config)
-- `docs/POSTGRESQL_SETUP.md` - Production deployment with PostgreSQL  
-- `docs/TROUBLESHOOTING.md` - Common issues and solutions
-- `docs/EXPERIMENT_MODE_GUIDE.md` - R&D prompt optimization (optional)
-
-### Everything Else
-Legacy complexity. Ignore it.
-
-## Why This Approach?
-
-Because 99% of "data science" code is just:
-1. Read data
-2. Call an API
-3. Write results
-
-The other 10,000 lines? Abstractions that make simple things complicated. 
-
-This project rejects that. One function. Clear purpose. You control everything else.
-
----
-
-## Quick Start: Running Experiments
-
-### New System (October 2025) ⭐ **Use This**
-
-The project now uses a YAML-based experiment tracking system for systematic evaluation.
-
-**Just run the experiment** - everything else is automatic:
-
-```bash
-# 1. Create experiment config
-cp configs/experiments/exp_001_test_gpt_oss.yaml configs/experiments/my_experiment.yaml
-# Edit your config (change model, prompts, temperature, etc.)
-
-# 2. Run experiment (that's it!)
-Rscript scripts/run_experiment.R configs/experiments/my_experiment.yaml
-```
-
-The script automatically:
-- Initializes database (first time only)
-- Loads data from Excel (first time only)
-- Processes narratives with LLM
-- Logs everything
-- Computes metrics
-- Saves results
-
-**Query results**:
-```r
-library(DBI)
-library(RSQLite)
-
-conn <- dbConnect(RSQLite::SQLite(), "data/experiments.db")
-
-# List all experiments
-dbGetQuery(conn, "SELECT experiment_id, experiment_name, f1_ipv, recall_ipv, precision_ipv
-                  FROM experiments ORDER BY created_at DESC")
-
-# Get detailed results for specific experiment
-dbGetQuery(conn, "SELECT * FROM narrative_results WHERE experiment_id = 'YOUR_ID'")
-
-# Find false positives
-dbGetQuery(conn, "SELECT incident_id, confidence, rationale 
-                  FROM narrative_results 
-                  WHERE experiment_id = 'YOUR_ID' AND is_false_positive = 1")
-
-dbDisconnect(conn)
-```
-
-### Benefits of New System
-
-- **Configuration-driven**: No code changes needed for new experiments
-- **Configurable database**: Edit `.db_config` to change database location
-- **Clean organization**: Database in `data/` directory, not root
-- **Full tracking**: Every experiment stored in database with metadata
-- **Comprehensive logging**: 4 log files per experiment for debugging
-- **Easy comparison**: SQL queries to compare models/prompts
-- **Faster data loading**: Excel → SQLite once, then 50-100x faster queries
-
-**Configure database location**: Edit `.db_config` file in project root
-```bash
-# Default (recommended)
-EXPERIMENTS_DB=data/experiments.db
-
-# Or use absolute path
-EXPERIMENTS_DB=/path/to/your/database.db
-```
-
-See [Database Configuration Guide](docs/20251003-database_configuration_guide.md) for details.
-
-### Old System (Deprecated)
-
-Old `run_benchmark*.R` scripts in `scripts/archive/` are deprecated.
-Do not use them for new experiments. They required manual script editing and had no systematic tracking.
-
----
-
-## Documentation
-
-- **[Documentation Index](docs/20251003-INDEX.md)** - Complete guide to all documentation ⭐
-- [Testing Instructions](docs/20251003-testing_instructions.md) - How to run tests
-- [Phase 1 Complete](docs/20251003-phase1_implementation_complete.md) - Implementation guide
-- [Phase 2 Complete](docs/20251003-phase2_implementation_complete.md) - Full system overview
-- [Implementation Summary](docs/20251003-implementation_summary.md) - Quick reference
-- [Cleanup Status](docs/20251003-cleanup_complete_summary.md) - Current status & recommendations
-- [Code Organization Review](docs/20251003-code_organization_review.md) - Architecture & cleanup plan
-- [Scripts README](scripts/README.md) - Script usage guide
-
----
-
-## License
-
-MIT. Do whatever you want with it.
+Only the active production code paths live under `R/`, `scripts/`, `configs/`, and `tests/testthat`. Everything else
+is documentation or archived artifacts for traceability.
+
+## Quick Start
+
+1. **Install prerequisites.** R 4.3+, `Rscript`, and an OpenAI-compatible endpoint (e.g. LM Studio). In R:
+   ```r
+   install.packages(c(
+     "DBI", "RSQLite", "yaml", "httr2", "jsonlite", "readxl", "dplyr",
+     "tibble", "tidyr", "uuid", "here"
+   ))
+   ```
+2. **Configure the LLM endpoint.** Create `.Renviron` entries or export environment variables:
+   ```bash
+   export LLM_API_URL="http://localhost:1234/v1/chat/completions"
+   export LLM_MODEL="mlx-community/gpt-oss-120b"
+   ```
+3. **Copy a base experiment.**
+   ```bash
+   cp configs/experiments/exp_037_baseline_v4_t00_medium.yaml configs/experiments/my_run.yaml
+   # adjust prompt/version/temperature as desired
+   ```
+4. **Run it.**
+   ```bash
+   Rscript scripts/run_experiment.R configs/experiments/my_run.yaml
+   ```
+   Results go to `data/experiments.db`; CSV/JSON exports land in `benchmark_results/`; logs appear in
+   `logs/experiments/<experiment_id>/`.
+5. **Inspect results.**
+   ```r
+   library(DBI)
+   conn <- dbConnect(RSQLite::SQLite(), "data/experiments.db")
+   dbGetQuery(conn, "SELECT experiment_name, f1_ipv, precision_ipv, recall_ipv FROM experiments ORDER BY created_at DESC LIMIT 5")
+   dbDisconnect(conn)
+   ```
+
+## Syncing to PostgreSQL
+
+1. Ensure `.env` contains the desired connection, for example:
+   ```bash
+   PG_HOST=memini.lan
+   PG_PORT=5433
+   PG_USER=postgres
+   PG_PASSWORD=********
+   PG_DATABASE=postgres
+   PG_CONN_STR=postgresql://postgres:********@memini.lan:5433/postgres
+   ```
+2. Run the sync script:
+   ```bash
+   PG_CONN_STR=postgresql://postgres:********@memini.lan:5433/postgres \
+   scripts/sync_sqlite_to_postgres.sh
+   ```
+   The script now reports SQLite counts, Postgres before/after totals, size delta, and elapsed time.
+
+## Reporting & Documentation
+
+- Latest performance summary: `docs/20251004-experiment_results_report.md`
+- Experiment automation plan + schema: `docs/20251003-unified_experiment_automation_plan.md`
+- Archived analyses: `docs/analysis/`
+- Contributor guidelines for agents: `AGENTS.md`
+
+## Testing
+
+- Unit/integration tests:
+  ```bash
+  Rscript tests/testthat.R
+  ```
+- Manual smoke test of the infrastructure:
+  ```bash
+  Rscript tests/manual_test_experiment_setup.R
+  ```
+- Shell wrappers (optional): `tests/test_phase1.sh`, `tests/validate_phase1.sh`
+
+## Ready for Merge?
+
+- ✅ Only production paths remain in `R/`, `configs/`, `scripts/`, and `tests/`; legacy utilities live under
+  `R/legacy/` for reference.
+- ✅ Generated artefacts (`benchmark_results/`, `logs/`, analysis notebooks) are treated as documentation; no orphaned
+  code paths remain.
+- ✅ README, docs, and the Postgres sync script reflect the current workflow.
+- ✅ Experiment metrics are exported and summarized in docs.
+
+With the run pipeline, documentation, and retirement of unused helpers in place, this branch is ready to merge back
+into the mainline.

@@ -1,0 +1,47 @@
+here() starts at /Volumes/DATA/git/IPV_detection_in_NVDRS
+Loading R files...
+  ✓ build_prompt.R
+  ✓ call_llm.R
+  ✓ config_loader.R
+  ✓ data_loader.R
+  ✓ db_config.R
+  ✓ db_schema.R
+  ✓ experiment_logger.R
+  ✓ experiment_queries.R
+  ✓ IPVdetection-package.R
+  ✓ metrics.R
+  ✓ parse_llm_result.R
+  ✓ repair_json.R
+  ✓ run_benchmark_core.R
+  ✓ utils.R
+
+Running tests...
+
+Attaching package: ‘dplyr’
+
+The following object is masked from ‘package:testthat’:
+
+    matches
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+✔ | F W  S  OK | Context
+
+⠏ |          0 | build_prompt                                                   
+✔ |         17 | build_prompt
+
+⠏ |          0 | call_llm                                                       
+⠧ |          8 | call_llm                                                       
+✔ |         11 | call_llm [18.3s]
+
+⠏ |          0 | config_loader                                                  Loading configuration from: /Volumes/DATA/git/IPV_detection_in_NVDRS/tests/fixtures/configs/valid_minimal.yaml 
+Loading configuration from: /Volumes/DATA/git/IPV_detection_in_NVDRS/tests/fixtures/configs/valid_complete.yaml 
+Loading configuration from: test_env.yaml 
+
+⠏ | 6       24 | config_loader                                                  
