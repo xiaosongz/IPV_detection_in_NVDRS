@@ -134,6 +134,12 @@ validate_config <- function(config) {
     config$prompt$user_template <- paste(readLines(prompt_file_path), collapse = "\n")
   }
 
+  # Ensure user template contains narrative placeholder
+  if (!is.null(config$prompt$user_template) &&
+      !grepl("<<TEXT>>", config$prompt$user_template, fixed = TRUE)) {
+    stop("prompt.user_template must contain '<<TEXT>>' placeholder")
+  }
+
   # Check data section
   if (is.null(config$data$file) || config$data$file == "") {
     stop("data.file is required")

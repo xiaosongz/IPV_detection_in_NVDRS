@@ -111,7 +111,7 @@ initialize_parse_result <- function(narrative_id, metadata) {
     tokens_used = NA_integer_,
     prompt_tokens = NA_integer_,
     completion_tokens = NA_integer_,
-    narrative_id = narrative_id,
+    narrative_id = if (is.null(narrative_id)) NA_character_ else as.character(narrative_id),
     parse_error = FALSE,
     error_message = NA_character_,
     raw_response = NA_character_

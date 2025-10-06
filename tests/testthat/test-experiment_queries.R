@@ -97,28 +97,26 @@ test_that("compare_experiments handles single experiment", {
   DBI::dbDisconnect(con)
 })
 
-test_that("find_disagreements identifies conflicting predictions", {
+test_that("find_disagreements identifies misclassifications within experiment", {
   con <- create_temp_db()
   config <- mock_config()
   
-  # Create two experiments
+  # Single experiment with ground-truth manual flags
   exp1 <- start_experiment(con, config)
-  exp2 <- start_experiment(con, config)
   
-  # Log same incident with different results
+  # False negative: manual flag positive but detected FALSE
   log_narrative_result(con, exp1, list(
     incident_id = "INC-001",
-    detected = TRUE,
+    narrative_type = "LE",
+    row_num = 1,
+    narrative_text = "Test narrative",
+    manual_flag_ind = 1,
+    manual_flag = 1,
+    detected = FALSE,
     confidence = 0.9
   ))
   
-  log_narrative_result(con, exp2, list(
-    incident_id = "INC-001",
-    detected = FALSE,
-    confidence = 0.8
-  ))
-  
-  disagreements <- find_disagreements(con, c(exp1, exp2))
+  disagreements <- find_disagreements(con, exp1)
   
   expect_true(nrow(disagreements) >= 1)
   expect_true("INC-001" %in% disagreements$incident_id)

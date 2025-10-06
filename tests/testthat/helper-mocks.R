@@ -168,7 +168,8 @@ mock_uuid_generate <- function(ids = NULL) {
 mock_config <- function(overrides = list()) {
   default_config <- list(
     experiment = list(
-      name = "test_experiment"
+      name = "test_experiment",
+      author = "test_author"
     ),
     model = list(
       name = "test-model",
@@ -203,7 +204,8 @@ mock_config <- function(overrides = list()) {
 #' @return Database connection
 #' @export
 mock_populated_db <- function(n_experiments = 3, n_results = 30) {
-  con <- create_temp_db(initialize = TRUE)
+  # Ensure connection stays alive for the caller test scope
+  con <- create_temp_db(initialize = TRUE, defer_env = parent.frame())
 
   # Add sample narratives
   load_sample_narratives(con)
