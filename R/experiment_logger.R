@@ -102,47 +102,68 @@ start_experiment <- function(conn, config) {
 #' @param result Parsed LLM result (from parse_llm_result)
 #' @export
 log_narrative_result <- function(conn, experiment_id, result) {
-  # Convert indicators list to JSON string
-  indicators_json <- if (!is.null(result$indicators) && length(result$indicators) > 0) {
-    jsonlite::toJSON(result$indicators, auto_unbox = TRUE)
-  } else {
-    "[]"
+  # Helper to coerce possibly NULL/NA values to a scalar of the right type
+  as_int1 <- function(x, default = NA_integer_) {
+    if (is.null(x) || length(x) == 0 || all(is.na(x))) return(default)
+    as.integer(x)[1]
+  }
+  as_num1 <- function(x, default = NA_real_) {
+    if (is.null(x) || length(x) == 0 || all(is.na(x))) return(default)
+    as.numeric(x)[1]
+    }
+  as_chr1 <- function(x, default = NA_character_) {
+    if (is.null(x) || length(x) == 0 || all(is.na(x))) return(default)
+    as.character(x)[1]
+  }
+  as_logi1 <- function(x, default = NA) {
+    if (is.null(x) || length(x) == 0 || all(is.na(x))) return(default)
+    as.logical(x)[1]
   }
 
-  # Compute classification flags
-  is_tp <- is_tn <- is_fp <- is_fn <- as.integer(NA)
-
-  if (!is.na(result$detected) && !is.na(result$manual_flag_ind)) {
-    detected_bool <- as.logical(result$detected)
-    manual_bool <- as.logical(result$manual_flag_ind)
-
-    is_tp <- as.integer(detected_bool && manual_bool)
-    is_tn <- as.integer(!detected_bool && !manual_bool)
-    is_fp <- as.integer(detected_bool && !manual_bool)
-    is_fn <- as.integer(!detected_bool && manual_bool)
+  # Convert indicators list/vector to a JSON string (length-1)
+  indicators_json <- "[]"
+  if (!is.null(result$indicators) && length(result$indicators) > 0) {
+    ind <- result$indicators
+    # If wrapped as tibble list-column, unwrap the first element
+    if (is.list(ind) && length(ind) == 1 && !is.null(ind[[1]])) ind <- ind[[1]]
+    indicators_json <- jsonlite::toJSON(ind, auto_unbox = TRUE)
   }
 
-  prompt_tokens <- if (is.null(result$prompt_tokens) || is.na(result$prompt_tokens)) {
-    NA_integer_
-  } else {
-    as.integer(result$prompt_tokens)
-  }
-  completion_tokens <- if (is.null(result$completion_tokens) || is.na(result$completion_tokens)) {
-    NA_integer_
-  } else {
-    as.integer(result$completion_tokens)
-  }
-  total_tokens <- if (is.null(result$tokens_used) || is.na(result$tokens_used)) {
-    NA_integer_
-  } else {
-    as.integer(result$tokens_used)
+  # Compute classification flags (TP/TN/FP/FN) if both labels available
+  is_tp <- is_tn <- is_fp <- is_fn <- NA_integer_
+  det_val <- as_logi1(result$detected, default = NA)
+  man_val <- as_logi1(result$manual_flag_ind, default = NA)
+  if (!is.na(det_val) && !is.na(man_val)) {
+    is_tp <- as.integer(det_val && man_val)
+    is_tn <- as.integer(!det_val && !man_val)
+    is_fp <- as.integer(det_val && !man_val)
+    is_fn <- as.integer(!det_val && man_val)
   }
 
-  incident_id_value <- if (is.null(result$incident_id) || is.na(result$incident_id)) {
-    NA_character_
-  } else {
-    as.character(result$incident_id)
-  }
+  # Token fields
+  prompt_tokens     <- as_int1(result$prompt_tokens)
+  completion_tokens <- as_int1(result$completion_tokens)
+  total_tokens      <- as_int1(result$tokens_used)
+
+  # Narrative keys (allow minimal error rows)
+  incident_id_value <- as_chr1(result$incident_id)
+  narrative_type    <- as_chr1(result$narrative_type)
+  row_num           <- as_int1(result$row_num)
+  narrative_text    <- as_chr1(result$narrative_text)
+  manual_flag_ind   <- as_int1(result$manual_flag_ind)
+  manual_flag       <- as_int1(result$manual_flag)
+  detected_int      <- as_int1(result$detected)
+  confidence_val    <- as_num1(result$confidence)
+  rationale_val     <- as_chr1(result$rationale)
+  reasoning_val     <- as_chr1(result$reasoning)
+  raw_response_val  <- as_chr1(result$raw_response)
+  response_sec_val  <- as_num1(result$response_sec)
+
+  # Error flags: accept either parse_error or error_occurred
+  parse_err_val     <- as_logi1(result$parse_error, default = FALSE)
+  error_occ_input   <- as_logi1(result$error_occurred, default = FALSE)
+  error_occurred    <- as.integer(isTRUE(parse_err_val) || isTRUE(error_occ_input))
+  error_message_val <- as_chr1(result$error_message)
 
   DBI::dbExecute(conn,
     "INSERT INTO narrative_results (
@@ -157,21 +178,21 @@ log_narrative_result <- function(conn, experiment_id, result) {
     params = list(
       experiment_id,
       incident_id_value,
-      result$narrative_type,
-      result$row_num,
-      result$narrative_text,
-      as.integer(result$manual_flag_ind),
-      as.integer(result$manual_flag),
-      as.integer(result$detected),
-      result$confidence,
-      as.character(indicators_json),
-      result$rationale,
-      result$reasoning,
-      result$raw_response,
-      result$response_sec,
+      narrative_type,
+      row_num,
+      narrative_text,
+      manual_flag_ind,
+      manual_flag,
+      detected_int,
+      confidence_val,
+      as_chr1(indicators_json, default = "[]"),
+      rationale_val,
+      reasoning_val,
+      raw_response_val,
+      response_sec_val,
       format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
-      as.integer(result$parse_error),
-      result$error_message,
+      as_int1(error_occurred, default = 0L),
+      error_message_val,
       prompt_tokens,
       completion_tokens,
       total_tokens,
@@ -234,6 +255,10 @@ finalize_experiment <- function(conn, experiment_id, csv_file = NULL, json_file 
   # Compute enhanced metrics from database results
   enhanced_metrics <- compute_enhanced_metrics(conn, experiment_id)
 
+  # Normalize optional file paths to scalar values
+  csv_file_val  <- if (is.null(csv_file)) NA_character_ else as.character(csv_file)
+  json_file_val <- if (is.null(json_file)) NA_character_ else as.character(json_file)
+
   DBI::dbExecute(conn,
     "UPDATE experiments SET
       status = 'completed',
@@ -275,8 +300,8 @@ finalize_experiment <- function(conn, experiment_id, csv_file = NULL, json_file 
       enhanced_metrics$n_true_positive,
       enhanced_metrics$n_true_negative,
       enhanced_metrics$pct_overlap_with_manual,
-      csv_file,
-      json_file,
+      csv_file_val,
+      json_file_val,
       experiment_id
     )
   )
@@ -436,9 +461,16 @@ init_experiment_logger <- function(experiment_id) {
     "timestamp,narrative_id,response_sec,status",
     log_paths$performance
   )
+  # Ensure errors log exists
+  if (!file.exists(log_paths$errors)) {
+    writeLines(paste("=== Errors Log:", experiment_id, "==="), log_paths$errors)
+  }
 
   list(
     log_dir = log_dir,
+    # Back-compat fields expected by tests
+    log_file = log_paths$main,
+    error_file = log_paths$errors,
     paths = log_paths,
     info = function(msg) {
       log_message(log_paths$main, "INFO", msg)

@@ -1,5 +1,5 @@
 # Test Setup Utilities
-# 
+#
 # Core helper functions for test setup, fixtures, and utilities
 
 library(testthat)
@@ -8,23 +8,37 @@ library(RSQLite)
 library(dplyr)
 library(withr)
 
+# Source required R functions for tests
+source(here::here("R", "config_loader.R"), local = TRUE)
+source(here::here("R", "data_loader.R"), local = TRUE)
+source(here::here("R", "db_config.R"), local = TRUE)
+source(here::here("R", "db_schema.R"), local = TRUE)
+source(here::here("R", "experiment_logger.R"), local = TRUE)
+source(here::here("R", "experiment_queries.R"), local = TRUE)
+source(here::here("R", "build_prompt.R"), local = TRUE)
+source(here::here("R", "call_llm.R"), local = TRUE)
+source(here::here("R", "parse_llm_result.R"), local = TRUE)
+source(here::here("R", "repair_json.R"), local = TRUE)
+source(here::here("R", "run_benchmark_core.R"), local = TRUE)
+source(here::here("tests/testthat/helper-mocks.R"), local = TRUE)
+
 #' Create a temporary in-memory database for testing
 #'
 #' @param initialize If TRUE, run init_experiment_db()
 #' @return Database connection
 #' @export
-create_temp_db <- function(initialize = TRUE) {
+create_temp_db <- function(initialize = TRUE, defer_env = parent.frame()) {
   con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
-  
+
   if (initialize) {
     # Source the db_schema.R to get init function
     source(here::here("R/db_schema.R"), local = TRUE)
     init_experiment_db_internal(con)
   }
-  
-  # Register cleanup
-  withr::defer(DBI::dbDisconnect(con), envir = parent.frame())
-  
+
+  # Register cleanup in provided environment (ensures proper lifecycle in nested helpers)
+  withr::defer(DBI::dbDisconnect(con), envir = defer_env)
+
   return(con)
 }
 
@@ -45,7 +59,7 @@ init_experiment_db_internal <- function(conn) {
       UNIQUE(incident_id, narrative_type)
     )
   ")
-  
+
   # Create experiments table
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS experiments (
@@ -92,7 +106,7 @@ init_experiment_db_internal <- function(conn) {
       notes TEXT
     )
   ")
-  
+
   # Create narrative_results table
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS narrative_results (
@@ -124,7 +138,7 @@ init_experiment_db_internal <- function(conn) {
       FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
     )
   ")
-  
+
   invisible(TRUE)
 }
 
@@ -137,7 +151,7 @@ init_experiment_db_internal <- function(conn) {
 create_sample_narratives <- function(n = 10, with_ipv = 0.5) {
   n_ipv <- floor(n * with_ipv)
   n_non_ipv <- n - n_ipv
-  
+
   ipv_texts <- c(
     "Boyfriend punched her in the face multiple times during argument",
     "Partner threatened to kill her if she left",
@@ -148,7 +162,7 @@ create_sample_narratives <- function(n = 10, with_ipv = 0.5) {
     "Partner destroyed her belongings during fight",
     "Husband forced her to have sex against her will"
   )
-  
+
   non_ipv_texts <- c(
     "Died by suicide, no indication of relationship violence",
     "Accidental overdose, living alone",
@@ -157,7 +171,7 @@ create_sample_narratives <- function(n = 10, with_ipv = 0.5) {
     "Self-inflicted gunshot wound, note mentioned depression only",
     "Fell from building, investigation found no foul play"
   )
-  
+
   tibble::tibble(
     incident_id = sprintf("INC-%05d", 1:n),
     narrative_type = "LE",
@@ -181,7 +195,7 @@ load_sample_narratives <- function(conn, narratives = NULL) {
   if (is.null(narratives)) {
     narratives <- create_sample_narratives()
   }
-  
+
   DBI::dbWriteTable(conn, "source_narratives", narratives, append = TRUE)
   return(nrow(narratives))
 }
