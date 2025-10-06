@@ -17,3 +17,21 @@ Tibble with narrative results
 \description{
 Retrieve all narrative-level results for an experiment
 }
+\examples{
+\dontrun{
+# Get results for a specific experiment
+conn <- get_db_connection()
+experiment_id <- "your-experiment-id"
+results <- get_experiment_results(conn, experiment_id)
+
+# Analyze detection performance
+cat("Total narratives:", nrow(results), "\n")
+cat("IPV detected:", sum(results$detected, na.rm = TRUE), "\n")
+cat("Manual flags:", sum(results$manual_flag_ind, na.rm = TRUE), "\n")
+
+# View confidence scores
+summary(results$confidence)
+
+dbDisconnect(conn)
+}
+}

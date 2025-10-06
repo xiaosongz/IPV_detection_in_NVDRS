@@ -15,3 +15,21 @@ Logger object (list with log functions)
 \description{
 Creates log directory and returns logger object with logging functions
 }
+\examples{
+\dontrun{
+# Initialize logger for experiment
+experiment_id <- "your-experiment-id"
+logger <- init_experiment_logger(experiment_id)
+
+# Log messages
+logger$info("Starting experiment")
+logger$warn("API call slow")
+logger$error("Failed to process narrative", error_obj = err)
+
+# Log API call performance
+logger$api_call("narrative_001", 2.5, "SUCCESS")
+logger$performance("narrative_001", 2.5, "OK")
+
+cat("Log directory:", logger$log_dir, "\n")
+}
+}

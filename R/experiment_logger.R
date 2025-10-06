@@ -6,20 +6,53 @@
 #' @param config Experiment configuration list
 #' @return experiment_id (UUID)
 #' @export
+#' @examples
+#' \dontrun{
+#' # Create test configuration
+#' config <- list(
+#'   experiment = list(
+#'     name = "Test IPV Detection",
+#'     author = "Research Team"
+#'   ),
+#'   model = list(
+#'     name = "gpt-4",
+#'     provider = "openai",
+#'     temperature = 0.1,
+#'     api_url = "https://api.openai.com/v1/chat/completions"
+#'   ),
+#'   prompt = list(
+#'     system_prompt = "You are an IPV detection expert.",
+#'     user_template = "Analyze: {narrative}",
+#'     version = "v1.0"
+#'   ),
+#'   data = list(
+#'     file = "nvdrs_data.csv"
+#'   ),
+#'   run = list(
+#'     seed = 42
+#'   )
+#' )
+#'
+#' # Start experiment
+#' conn <- get_db_connection()
+#' experiment_id <- start_experiment(conn, config)
+#' cat("Started experiment:", experiment_id, "\n")
+#' dbDisconnect(conn)
+#' }
 start_experiment <- function(conn, config) {
   if (!requireNamespace("uuid", quietly = TRUE)) {
     stop("Package 'uuid' is required but not installed.")
   }
-  
+
   experiment_id <- uuid::UUIDgenerate()
-  
+
   # Get API URL (handle both cases)
   api_url <- if (!is.null(config$model$api_url)) {
     config$model$api_url
   } else {
     Sys.getenv("LLM_API_URL", "http://localhost:1234/v1/chat/completions")
   }
-  
+
   DBI::dbExecute(conn,
     "INSERT INTO experiments (
       experiment_id, experiment_name, status,
@@ -49,13 +82,14 @@ start_experiment <- function(conn, config) {
       config$run$seed
     )
   )
-  
+
   # Update with log directory path
   log_dir <- file.path("logs", "experiments", experiment_id)
   DBI::dbExecute(conn,
     "UPDATE experiments SET log_dir = ? WHERE experiment_id = ?",
-    params = list(log_dir, experiment_id))
-  
+    params = list(log_dir, experiment_id)
+  )
+
   return(experiment_id)
 }
 
@@ -74,20 +108,20 @@ log_narrative_result <- function(conn, experiment_id, result) {
   } else {
     "[]"
   }
-  
+
   # Compute classification flags
   is_tp <- is_tn <- is_fp <- is_fn <- as.integer(NA)
-  
+
   if (!is.na(result$detected) && !is.na(result$manual_flag_ind)) {
     detected_bool <- as.logical(result$detected)
     manual_bool <- as.logical(result$manual_flag_ind)
-    
+
     is_tp <- as.integer(detected_bool && manual_bool)
     is_tn <- as.integer(!detected_bool && !manual_bool)
     is_fp <- as.integer(detected_bool && !manual_bool)
     is_fn <- as.integer(!detected_bool && manual_bool)
   }
-  
+
   prompt_tokens <- if (is.null(result$prompt_tokens) || is.na(result$prompt_tokens)) {
     NA_integer_
   } else {
@@ -103,13 +137,13 @@ log_narrative_result <- function(conn, experiment_id, result) {
   } else {
     as.integer(result$tokens_used)
   }
-  
+
   incident_id_value <- if (is.null(result$incident_id) || is.na(result$incident_id)) {
     NA_character_
   } else {
     as.character(result$incident_id)
   }
-  
+
   DBI::dbExecute(conn,
     "INSERT INTO narrative_results (
       experiment_id, incident_id, narrative_type, row_num,
@@ -155,29 +189,51 @@ log_narrative_result <- function(conn, experiment_id, result) {
 #' @param csv_file Optional path to CSV output file
 #' @param json_file Optional path to JSON output file
 #' @export
+#' @examples
+#' \dontrun{
+#' # After completing an experiment
+#' conn <- get_db_connection()
+#' experiment_id <- "your-experiment-id"
+#'
+#' # Finalize with metrics calculation
+#' finalize_experiment(conn, experiment_id)
+#'
+#' # Finalize with result files
+#' finalize_experiment(
+#'   conn,
+#'   experiment_id,
+#'   csv_file = "results.csv",
+#'   json_file = "results.json"
+#' )
+#'
+#' dbDisconnect(conn)
+#' }
 finalize_experiment <- function(conn, experiment_id, csv_file = NULL, json_file = NULL) {
   end_time <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-  
+
   # Get start time to compute total runtime
   start_info <- DBI::dbGetQuery(conn,
     "SELECT start_time, n_narratives_total FROM experiments WHERE experiment_id = ?",
-    params = list(experiment_id))
-  
+    params = list(experiment_id)
+  )
+
   total_runtime_sec <- as.numeric(difftime(
     as.POSIXct(end_time, format = "%Y-%m-%d %H:%M:%S"),
     as.POSIXct(start_info$start_time, format = "%Y-%m-%d %H:%M:%S"),
     units = "secs"
   ))
-  
-  avg_time_per_narrative <- if (!is.null(start_info$n_narratives_total) && start_info$n_narratives_total > 0) {
+
+  avg_time_per_narrative <- if (!is.null(start_info$n_narratives_total) &&
+    !is.na(start_info$n_narratives_total) &&
+    start_info$n_narratives_total > 0) {
     total_runtime_sec / start_info$n_narratives_total
   } else {
     NA_real_
   }
-  
+
   # Compute enhanced metrics from database results
   enhanced_metrics <- compute_enhanced_metrics(conn, experiment_id)
-  
+
   DBI::dbExecute(conn,
     "UPDATE experiments SET
       status = 'completed',
@@ -242,8 +298,9 @@ compute_enhanced_metrics <- function(conn, experiment_id) {
             is_false_positive, is_false_negative
      FROM narrative_results
      WHERE experiment_id = ? AND error_occurred = 0",
-    params = list(experiment_id))
-  
+    params = list(experiment_id)
+  )
+
   if (nrow(results) == 0) {
     return(list(
       n_narratives_processed = 0L,
@@ -262,36 +319,36 @@ compute_enhanced_metrics <- function(conn, experiment_id) {
       pct_overlap_with_manual = NA_real_
     ))
   }
-  
+
   # Count classifications
   n_tp <- sum(results$is_true_positive, na.rm = TRUE)
   n_tn <- sum(results$is_true_negative, na.rm = TRUE)
   n_fp <- sum(results$is_false_positive, na.rm = TRUE)
   n_fn <- sum(results$is_false_negative, na.rm = TRUE)
-  
+
   # Count detections
   n_positive_detected <- sum(results$detected, na.rm = TRUE)
   n_negative_detected <- sum(!results$detected, na.rm = TRUE)
   n_positive_manual <- sum(results$manual_flag_ind, na.rm = TRUE)
   n_negative_manual <- sum(!results$manual_flag_ind, na.rm = TRUE)
-  
+
   # Compute metrics
   n_total <- nrow(results)
   accuracy <- (n_tp + n_tn) / n_total
-  
+
   precision_ipv <- if ((n_tp + n_fp) > 0) n_tp / (n_tp + n_fp) else NA_real_
   recall_ipv <- if ((n_tp + n_fn) > 0) n_tp / (n_tp + n_fn) else NA_real_
-  
+
   f1_ipv <- if (!is.na(precision_ipv) && !is.na(recall_ipv) && (precision_ipv + recall_ipv) > 0) {
     2 * (precision_ipv * recall_ipv) / (precision_ipv + recall_ipv)
   } else {
     NA_real_
   }
-  
+
   # Compute overlap with manual flags
   n_correct <- n_tp + n_tn
   pct_overlap <- (n_correct / n_total) * 100
-  
+
   list(
     n_narratives_processed = as.integer(n_total),
     n_positive_detected = as.integer(n_positive_detected),
@@ -320,16 +377,17 @@ compute_enhanced_metrics <- function(conn, experiment_id) {
 #' @export
 mark_experiment_failed <- function(conn, experiment_id, error_msg) {
   end_time <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-  
+
   notes <- paste("FAILED:", error_msg)
-  
+
   DBI::dbExecute(conn,
     "UPDATE experiments SET
       status = 'failed',
       end_time = ?,
       notes = ?
     WHERE experiment_id = ?",
-    params = list(end_time, notes, experiment_id))
+    params = list(end_time, notes, experiment_id)
+  )
 }
 
 #' Initialize Experiment Logger
@@ -339,42 +397,56 @@ mark_experiment_failed <- function(conn, experiment_id, error_msg) {
 #' @param experiment_id Unique experiment ID
 #' @return Logger object (list with log functions)
 #' @export
+#' @examples
+#' \dontrun{
+#' # Initialize logger for experiment
+#' experiment_id <- "your-experiment-id"
+#' logger <- init_experiment_logger(experiment_id)
+#'
+#' # Log messages
+#' logger$info("Starting experiment")
+#' logger$warn("API call slow")
+#' logger$error("Failed to process narrative", error_obj = err)
+#'
+#' # Log API call performance
+#' logger$api_call("narrative_001", 2.5, "SUCCESS")
+#' logger$performance("narrative_001", 2.5, "OK")
+#'
+#' cat("Log directory:", logger$log_dir, "\n")
+#' }
 init_experiment_logger <- function(experiment_id) {
   log_dir <- here::here("logs", "experiments", experiment_id)
   dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
-  
+
   log_paths <- list(
     main = file.path(log_dir, "experiment.log"),
     api = file.path(log_dir, "api_calls.log"),
     errors = file.path(log_dir, "errors.log"),
     performance = file.path(log_dir, "performance.log")
   )
-  
+
   # Initialize log files with headers
   writeLines(
     paste("=== Experiment Log:", experiment_id, "==="),
     log_paths$main
   )
-  
+
   # Add CSV header to performance log
   writeLines(
     "timestamp,narrative_id,response_sec,status",
     log_paths$performance
   )
-  
+
   list(
     log_dir = log_dir,
     paths = log_paths,
-    
     info = function(msg) {
       log_message(log_paths$main, "INFO", msg)
     },
-    
     warn = function(msg) {
       log_message(log_paths$main, "WARN", msg)
       log_message(log_paths$errors, "WARN", msg)
     },
-    
     error = function(msg, error_obj = NULL) {
       log_message(log_paths$main, "ERROR", msg)
       log_message(log_paths$errors, "ERROR", msg)
@@ -382,7 +454,6 @@ init_experiment_logger <- function(experiment_id) {
         log_message(log_paths$errors, "ERROR", paste("Details:", as.character(error_obj)))
       }
     },
-    
     api_call = function(narrative_id, duration_sec, status = "SUCCESS") {
       log_line <- sprintf(
         "[%s] narrative_id=%s duration=%.2fs status=%s",
@@ -393,7 +464,6 @@ init_experiment_logger <- function(experiment_id) {
       )
       cat(log_line, "\n", file = log_paths$api, append = TRUE)
     },
-    
     performance = function(narrative_id, response_sec, status = "OK") {
       log_line <- sprintf(
         "%s,%s,%.2f,%s",

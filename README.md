@@ -242,7 +242,6 @@ See `configs/experiments/README.md` for complete list.
 All analysis notebooks use `YYYYMMDD-` prefix and are fully reproducible:
 
 - `20251005-experiment_comparison.Rmd` - Model/prompt performance comparison
-- `20251005-error_analysis.Rmd` - Failure mode analysis  
 - `20251005-reproduce_paper_figures.Rmd` - Generate all paper figures/tables
 - `20251005-validation_metrics.Rmd` - Accuracy metrics computation
 

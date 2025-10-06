@@ -17,3 +17,16 @@ Logical
 \description{
 Check if Data Already Loaded
 }
+\examples{
+\dontrun{
+# Check if data is already loaded
+conn <- get_db_connection()
+is_loaded <- check_data_loaded(conn, "nvdrs_data.csv")
+if (is_loaded) {
+  cat("Data already loaded\n")
+} else {
+  cat("Need to load data\n")
+  load_source_data(conn, "nvdrs_data.csv")
+}
+}
+}

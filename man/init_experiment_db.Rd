@@ -17,8 +17,8 @@ Creates SQLite database with experiments, narrative_results, and source_narrativ
 }
 \examples{
 \dontrun{
-  conn <- init_experiment_db()  # Uses centralized config
-  conn <- init_experiment_db("custom.db")  # Custom path
-  dbDisconnect(conn)
+conn <- init_experiment_db() # Uses centralized config
+conn <- init_experiment_db("custom.db") # Custom path
+dbDisconnect(conn)
 }
 }

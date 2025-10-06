@@ -15,3 +15,15 @@ DBI connection object
 \description{
 Opens connection to experiment database with error handling
 }
+\examples{
+\dontrun{
+# Connect using default path from config
+conn <- get_db_connection()
+dbDisconnect(conn)
+
+# Connect to specific database file
+conn <- get_db_connection("my_experiments.db")
+result <- dbGetQuery(conn, "SELECT COUNT(*) FROM experiments")
+dbDisconnect(conn)
+}
+}

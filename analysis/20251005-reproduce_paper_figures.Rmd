@@ -1,0 +1,170 @@
+---
+title: "Paper Figures and Tables"
+date: "2025-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(here)
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+
+# Source required functions
+source(here("R", "db_config.R"))
+source(here("R", "db_schema.R"))
+source(here("R", "experiment_queries.R"))
+
+# Publication theme
+theme_publication <- function() {
+  theme_minimal(base_size = 12) +
+    theme(
+      panel.grid.minor = element_blank(),
+      panel.grid.major = element_line(color = "gray90", linewidth = 0.5),
+      axis.title = element_text(size = 14, face = "bold"),
+      axis.text = element_text(size = 11),
+      legend.title = element_text(size = 12, face = "bold"),
+      legend.text = element_text(size = 11),
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+      strip.text = element_text(size = 11, face = "bold")
+    )
+}
+```
+
+## Paper Figures and Tables
+
+```{r load-data}
+conn <- get_db_connection()
+experiments <- list_experiments(conn) %>%
+  filter(status == "completed", !is.na(f1_ipv), n_narratives_processed > 0)
+```
+
+## Figure 1: Model Performance
+
+```{r model-performance}
+model_stats <- experiments %>%
+  group_by(model_name) %>%
+  summarise(
+    n_experiments = n(),
+    mean_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_f1))
+
+fig1 <- ggplot(model_stats, aes(x = reorder(model_name, mean_f1), y = mean_f1)) +
+  geom_col(fill = "#2c3e50", alpha = 0.8, width = 0.7) +
+  geom_errorbar(aes(ymin = mean_f1 - sd_f1, ymax = mean_f1 + sd_f1),
+                width = 0.3, color = "#e74c3c", linewidth = 1.2) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "LLM Performance in IPV Detection",
+    subtitle = "F1 scores across different models with error bars (±1 SD)",
+    x = "Model", y = "F1 Score"
+  ) +
+  coord_flip() +
+  theme_publication()
+
+fig1
+```
+
+## Figure 2: Temperature Impact
+
+```{r temperature-impact}
+temp_data <- experiments %>%
+  mutate(temp_category = case_when(
+    temperature == 0 ~ "0.0 (Deterministic)",
+    temperature > 0 & temperature <= 0.1 ~ "0.01-0.1 (Low)",
+    temperature > 0.1 & temperature <= 0.5 ~ "0.11-0.5 (Medium)",
+    temperature > 0.5 ~ "0.51+ (High)"
+  )) %>%
+  group_by(temp_category, model_name) %>%
+  summarise(mean_f1 = mean(f1_ipv, na.rm = TRUE), .groups = "drop")
+
+fig2 <- ggplot(temp_data, aes(x = temp_category, y = mean_f1, fill = model_name)) +
+  geom_col(position = "dodge", alpha = 0.8, width = 0.8) +
+  scale_fill_brewer(type = "qual", palette = "Set2") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(
+    title = "Impact of Temperature on IPV Detection",
+    subtitle = "F1 scores by temperature setting and model",
+    x = "Temperature Setting", y = "F1 Score", fill = "Model"
+  ) +
+  theme_publication() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+fig2
+```
+
+## Table 1: Performance Summary
+
+```{r performance-table}
+table1 <- experiments %>%
+  group_by(model_name) %>%
+  summarise(
+    Experiments = n(),
+    `Mean F1` = paste0(round(mean(f1_ipv, na.rm = TRUE) * 100, 1), "%"),
+    `SD F1` = paste0("±", round(sd(f1_ipv, na.rm = TRUE) * 100, 1), "%"),
+    `Mean Precision` = paste0(round(mean(precision_ipv, na.rm = TRUE) * 100, 1), "%"),
+    `Mean Recall` = paste0(round(mean(recall_ipv, na.rm = TRUE) * 100, 1), "%"),
+    Total_Narratives = sum(n_narratives_processed, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(as.numeric(gsub("[%±]", "", `Mean F1`))))
+
+kable(table1, caption = "Performance Summary by Model", digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Summary Statistics
+
+```{r summary-stats}
+summary_stats <- tibble(
+  Metric = c("Total Experiments", "Completed Experiments", "Total Narratives",
+            "Best F1 Score", "Mean F1 Score"),
+  Value = c(
+    nrow(list_experiments(conn)),
+    nrow(experiments),
+    sum(experiments$n_narratives_processed, na.rm = TRUE),
+    round(max(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(mean(experiments$f1_ipv, na.rm = TRUE), 3)
+  )
+)
+
+kable(summary_stats, caption = "Summary Statistics") %>%
+  kable_styling(bootstrap_options = c("striped"))
+```
+
+## Save Outputs
+
+```{r save-outputs}
+# Create directories
+fig_dir <- here("docs", "figures")
+table_dir <- here("docs", "tables")
+if (!dir.exists(fig_dir)) dir.create(fig_dir, recursive = TRUE)
+if (!dir.exists(table_dir)) dir.create(table_dir, recursive = TRUE)
+
+# Save figures
+ggsave(file.path(fig_dir, "figure1_model_performance.pdf"), fig1, width = 10, height = 6, dpi = 300)
+ggsave(file.path(fig_dir, "figure2_temperature_impact.pdf"), fig2, width = 12, height = 6, dpi = 300)
+
+# Save tables
+write.csv(table1, file.path(table_dir, "table1_performance_summary.csv"), row.names = FALSE)
+
+cat("Figures saved to:", fig_dir, "\n")
+cat("Tables saved to:", table_dir, "\n")
+```
+
+```{r cleanup, include=FALSE}
+DBI::dbDisconnect(conn)
+```
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```

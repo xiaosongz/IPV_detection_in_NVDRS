@@ -18,3 +18,23 @@ finalize_experiment(conn, experiment_id, csv_file = NULL, json_file = NULL)
 \description{
 Updates experiment with final metrics and status
 }
+\examples{
+\dontrun{
+# After completing an experiment
+conn <- get_db_connection()
+experiment_id <- "your-experiment-id"
+
+# Finalize with metrics calculation
+finalize_experiment(conn, experiment_id)
+
+# Finalize with result files
+finalize_experiment(
+  conn,
+  experiment_id,
+  csv_file = "results.csv",
+  json_file = "results.json"
+)
+
+dbDisconnect(conn)
+}
+}

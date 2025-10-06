@@ -15,3 +15,17 @@ TRUE if valid, stops with error otherwise
 \description{
 Checks required fields and validates parameter ranges
 }
+\examples{
+\dontrun{
+# Load and validate configuration
+config <- load_experiment_config("configs/experiments/exp_037_baseline_v4_t00_medium.yaml")
+validate_config(config) # Will stop if invalid
+
+# Check specific validation rules
+# - Temperature must be between 0.0 and 2.0
+# - Model name must be specified
+# - Data file must exist
+# - Required sections must be present
+}
+
+}

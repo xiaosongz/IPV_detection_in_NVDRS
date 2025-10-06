@@ -7,9 +7,9 @@
 #' @export
 #' @examples
 #' \dontrun{
-#'   conn <- init_experiment_db()  # Uses centralized config
-#'   conn <- init_experiment_db("custom.db")  # Custom path
-#'   dbDisconnect(conn)
+#' conn <- init_experiment_db() # Uses centralized config
+#' conn <- init_experiment_db("custom.db") # Custom path
+#' dbDisconnect(conn)
 #' }
 init_experiment_db <- function(db_path = NULL) {
   if (is.null(db_path)) {
@@ -21,12 +21,12 @@ init_experiment_db <- function(db_path = NULL) {
   if (!requireNamespace("RSQLite", quietly = TRUE)) {
     stop("Package 'RSQLite' is required but not installed.")
   }
-  
+
   conn <- DBI::dbConnect(RSQLite::SQLite(), db_path)
-  
+
   # Enable foreign keys
   DBI::dbExecute(conn, "PRAGMA foreign_keys = ON")
-  
+
   # Table 0: source_narratives
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS source_narratives (
@@ -41,11 +41,11 @@ init_experiment_db <- function(db_path = NULL) {
       UNIQUE(incident_id, narrative_type)
     )
   ")
-  
+
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_source_incident ON source_narratives(incident_id)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_source_type ON source_narratives(narrative_type)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_source_manual ON source_narratives(manual_flag_ind)")
-  
+
   # Table 1: experiments
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS experiments (
@@ -92,12 +92,12 @@ init_experiment_db <- function(db_path = NULL) {
       notes TEXT
     )
   ")
-  
+
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_status ON experiments(status)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_model_name ON experiments(model_name)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_prompt_version ON experiments(prompt_version)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_created_at ON experiments(created_at)")
-  
+
   # Table 2: narrative_results
   DBI::dbExecute(conn, "
     CREATE TABLE IF NOT EXISTS narrative_results (
@@ -129,7 +129,7 @@ init_experiment_db <- function(db_path = NULL) {
       FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
     )
   ")
-  
+
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_experiment_id ON narrative_results(experiment_id)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_incident_id ON narrative_results(incident_id)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_narrative_type ON narrative_results(narrative_type)")
@@ -152,6 +152,17 @@ init_experiment_db <- function(db_path = NULL) {
 #' @param db_path Path to SQLite database file. If NULL, uses centralized config.
 #' @return DBI connection object
 #' @export
+#' @examples
+#' \dontrun{
+#' # Connect using default path from config
+#' conn <- get_db_connection()
+#' dbDisconnect(conn)
+#'
+#' # Connect to specific database file
+#' conn <- get_db_connection("my_experiments.db")
+#' result <- dbGetQuery(conn, "SELECT COUNT(*) FROM experiments")
+#' dbDisconnect(conn)
+#' }
 get_db_connection <- function(db_path = NULL) {
   if (is.null(db_path)) {
     db_path <- get_experiments_db_path()
@@ -159,11 +170,11 @@ get_db_connection <- function(db_path = NULL) {
   if (!file.exists(db_path)) {
     stop("Database not found at: ", db_path, "\nPlease run init_experiment_db() first.")
   }
-  
+
   conn <- DBI::dbConnect(RSQLite::SQLite(), db_path)
   DBI::dbExecute(conn, "PRAGMA foreign_keys = ON")
   ensure_token_columns(conn)
-  
+
   return(conn)
 }
 
