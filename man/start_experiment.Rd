@@ -17,3 +17,37 @@ experiment_id (UUID)
 \description{
 Creates new experiment record in database and returns experiment ID
 }
+\examples{
+\dontrun{
+# Create test configuration
+config <- list(
+  experiment = list(
+    name = "Test IPV Detection",
+    author = "Research Team"
+  ),
+  model = list(
+    name = "gpt-4",
+    provider = "openai",
+    temperature = 0.1,
+    api_url = "https://api.openai.com/v1/chat/completions"
+  ),
+  prompt = list(
+    system_prompt = "You are an IPV detection expert.",
+    user_template = "Analyze: {narrative}",
+    version = "v1.0"
+  ),
+  data = list(
+    file = "nvdrs_data.csv"
+  ),
+  run = list(
+    seed = 42
+  )
+)
+
+# Start experiment
+conn <- get_db_connection()
+experiment_id <- start_experiment(conn, config)
+cat("Started experiment:", experiment_id, "\n")
+dbDisconnect(conn)
+}
+}

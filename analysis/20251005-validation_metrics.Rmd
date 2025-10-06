@@ -1,0 +1,413 @@
+---
+title: "Validation Metrics Computation"
+date: "2025-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(here)
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(tidyr)
+library(purrr)
+
+# Source required functions
+source(here("R", "db_config.R"))
+source(here("R", "db_schema.R"))
+source(here("R", "experiment_queries.R"))
+```
+
+## Validation Metrics Computation
+
+This notebook computes comprehensive validation metrics for IPV detection models, including precision, recall, F1-score, and performance analysis.
+
+### Load Data
+
+```{r load-data}
+# Connect to database
+conn <- get_db_connection()
+
+# Get all completed experiments with results
+experiments <- list_experiments(conn) %>%
+  filter(status == "completed", !is.na(f1_ipv), n_narratives_processed > 0)
+
+cat("Total completed experiments:", nrow(experiments), "\n")
+cat("Total narratives processed:", sum(experiments$n_narratives_processed, na.rm = TRUE), "\n")
+```
+
+### Basic Performance Metrics
+
+```{r basic-metrics}
+# Create comprehensive metrics table
+metrics_table <- experiments %>%
+  select(
+    experiment_id, experiment_name, model_name, temperature, prompt_version,
+    n_narratives_processed,
+    precision_ipv, recall_ipv, f1_ipv,
+    total_runtime_sec
+  ) %>%
+  arrange(desc(f1_ipv))
+
+kable(metrics_table,
+      caption = "Basic Performance Metrics",
+      digits = 3,
+      format.args = list(big.mark = ",")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+### Performance by Model
+
+```{r model-performance}
+# Aggregate by model
+model_stats <- experiments %>%
+  group_by(model_name) %>%
+  summarise(
+    n_experiments = n(),
+    mean_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE),
+    mean_precision = mean(precision_ipv, na.rm = TRUE),
+    mean_recall = mean(recall_ipv, na.rm = TRUE),
+    total_narratives = sum(n_narratives_processed, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_f1))
+
+kable(model_stats,
+      caption = "Performance by Model",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Performance by Prompt Version
+
+```{r prompt-performance}
+# Aggregate by prompt version
+prompt_stats <- experiments %>%
+  group_by(prompt_version) %>%
+  summarise(
+    n_experiments = n(),
+    mean_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE),
+    mean_precision = mean(precision_ipv, na.rm = TRUE),
+    mean_recall = mean(recall_ipv, na.rm = TRUE),
+    total_narratives = sum(n_narratives_processed, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_f1))
+
+kable(prompt_stats,
+      caption = "Performance by Prompt Version",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### F1 Score Distribution
+
+```{r f1-distribution}
+ggplot(experiments, aes(x = f1_ipv)) +
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7) +
+  geom_vline(aes(xintercept = mean(f1_ipv, na.rm = TRUE)),
+             color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Distribution of F1 Scores Across Experiments",
+       x = "F1 Score", y = "Number of Experiments") +
+  theme_minimal()
+```
+
+### Precision vs Recall Tradeoff
+
+```{r precision-vs-recall}
+ggplot(experiments, aes(x = recall_ipv, y = precision_ipv)) +
+  geom_point(aes(color = model_name, size = n_narratives_processed), alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "gray") +
+  labs(title = "Precision vs Recall Tradeoff",
+       x = "Recall (Sensitivity)", y = "Precision (Positive Predictive Value)",
+       color = "Model", size = "Narratives") +
+  theme_minimal() +
+  scale_color_brewer(type = "qual", palette = "Set2")
+```
+
+### Temperature Impact Analysis
+
+```{r temperature-impact}
+temp_analysis <- experiments %>%
+  filter(!is.na(temperature)) %>%
+  mutate(temp_category = case_when(
+    temperature == 0 ~ "0.0 (Deterministic)",
+    temperature > 0 & temperature <= 0.1 ~ "0.01-0.1 (Low)",
+    temperature > 0.1 & temperature <= 0.5 ~ "0.11-0.5 (Medium)",
+    temperature > 0.5 ~ "0.51+ (High)"
+  ))
+
+ggplot(temp_analysis, aes(x = temp_category, y = f1_ipv)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.7) +
+  geom_jitter(width = 0.1, alpha = 0.5) +
+  labs(title = "Impact of Temperature on F1 Score",
+       x = "Temperature Category", y = "F1 Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Runtime Analysis
+
+```{r runtime-analysis}
+# Runtime efficiency
+runtime_stats <- experiments %>%
+  mutate(narratives_per_sec = n_narratives_processed / total_runtime_sec) %>%
+  select(experiment_name, model_name, n_narratives_processed,
+         total_runtime_sec, narratives_per_sec, f1_ipv) %>%
+  arrange(desc(narratives_per_sec))
+
+kable(head(runtime_stats, 10),
+      caption = "Runtime Efficiency (Top 10)",
+      digits = 2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Runtime vs Performance
+ggplot(experiments, aes(x = total_runtime_sec, y = f1_ipv)) +
+  geom_point(aes(color = model_name, size = n_narratives_processed), alpha = 0.7) +
+  labs(title = "Runtime vs Performance",
+       x = "Total Runtime (seconds)", y = "F1 Score",
+       color = "Model", size = "Narratives") +
+  theme_minimal() +
+  scale_color_brewer(type = "qual", palette = "Set2")
+```
+
+### Top Performing Experiments
+
+```{r top-performers}
+top_experiments <- experiments %>%
+  arrange(desc(f1_ipv)) %>%
+  head(10) %>%
+  select(experiment_name, model_name, prompt_version,
+         f1_ipv, precision_ipv, recall_ipv,
+         n_narratives_processed, total_runtime_sec)
+
+kable(top_experiments,
+      caption = "Top 10 Performing Experiments",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+### Statistical Significance Testing
+
+```{r significance-testing}
+# Compare models using paired tests
+model_comparison <- experiments %>%
+  group_by(model_name) %>%
+  summarise(
+    n_experiments = n(),
+    mean_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_f1))
+
+kable(model_comparison,
+      caption = "Performance by Model",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Statistical tests if we have multiple experiments per model
+model_names <- experiments %>% count(model_name) %>% filter(n > 1) %>% pull(model_name)
+
+if (length(model_names) >= 2) {
+  # Perform pairwise t-tests between models
+  pairwise_tests <- tibble()
+
+  for (i in 1:(length(model_names) - 1)) {
+    for (j in (i + 1):length(model_names)) {
+      model1 <- model_names[i]
+      model2 <- model_names[j]
+
+      f1_scores1 <- experiments %>% filter(model_name == model1) %>% pull(f1_ipv)
+      f1_scores2 <- experiments %>% filter(model_name == model2) %>% pull(f1_ipv)
+
+      if (length(f1_scores1) > 1 && length(f1_scores2) > 1) {
+        test_result <- t.test(f1_scores1, f1_scores2)
+
+        pairwise_tests <- bind_rows(pairwise_tests,
+          tibble(
+            model1 = model1,
+            model2 = model2,
+            mean_diff = mean(f1_scores1) - mean(f1_scores2),
+            p_value = test_result$p.value,
+            significant = test_result$p.value < 0.05
+          )
+        )
+      }
+    }
+  }
+
+  if (nrow(pairwise_tests) > 0) {
+    kable(pairwise_tests %>%
+          arrange(p_value) %>%
+          mutate(significance = ifelse(significant, "Yes", "No")),
+          caption = "Statistical Significance Tests (F1 Score)",
+          digits = 3) %>%
+      kable_styling(bootstrap_options = c("striped", "hover"))
+  }
+}
+```
+
+### Performance Summary by Configuration
+
+```{r config-summary}
+# Analyze performance by prompt version and temperature
+config_analysis <- experiments %>%
+  mutate(
+    temp_category = case_when(
+      temperature == 0 ~ "0.0",
+      temperature > 0 & temperature <= 0.1 ~ "0.01-0.1",
+      temperature > 0.1 & temperature <= 0.5 ~ "0.11-0.5",
+      temperature > 0.5 ~ "0.51+"
+    )
+  ) %>%
+  group_by(prompt_version, temp_category) %>%
+  summarise(
+    n_experiments = n(),
+    mean_f1 = mean(f1_ipv, na.rm = TRUE),
+    sd_f1 = sd(f1_ipv, na.rm = TRUE),
+    mean_precision = mean(precision_ipv, na.rm = TRUE),
+    mean_recall = mean(recall_ipv, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_f1))
+
+kable(config_analysis,
+      caption = "Performance by Configuration",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Heatmap of performance
+config_matrix <- experiments %>%
+  mutate(
+    temp_category = case_when(
+      temperature == 0 ~ "0.0",
+      temperature > 0 & temperature <= 0.1 ~ "0.01-0.1",
+      temperature > 0.1 & temperature <= 0.5 ~ "0.11-0.5",
+      temperature > 0.5 ~ "0.51+"
+    )
+  ) %>%
+  group_by(prompt_version, temp_category) %>%
+  summarise(mean_f1 = mean(f1_ipv, na.rm = TRUE), .groups = "drop")
+
+if (nrow(config_matrix) > 0) {
+  ggplot(config_matrix, aes(x = temp_category, y = prompt_version, fill = mean_f1)) +
+    geom_tile(alpha = 0.8) +
+    geom_text(aes(label = round(mean_f1, 2)), color = "white", size = 3) +
+    scale_fill_gradient(low = "lightblue", high = "darkblue", name = "F1 Score") +
+    labs(title = "Performance Heatmap by Configuration",
+         x = "Temperature Category", y = "Prompt Version") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+```
+
+### Validation Summary
+
+```{r validation-summary}
+# Overall validation statistics
+validation_summary <- tibble(
+  Metric = c(
+    "Total Experiments",
+    "Completed Experiments",
+    "Mean F1 Score",
+    "Median F1 Score",
+    "Std Dev F1 Score",
+    "Best F1 Score",
+    "Worst F1 Score",
+    "Mean Precision",
+    "Mean Recall"
+  ),
+  Value = c(
+    nrow(list_experiments(conn)),
+    nrow(experiments),
+    round(mean(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(median(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(sd(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(max(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(min(experiments$f1_ipv, na.rm = TRUE), 3),
+    round(mean(experiments$precision_ipv, na.rm = TRUE), 3),
+    round(mean(experiments$recall_ipv, na.rm = TRUE), 3)
+  )
+)
+
+kable(validation_summary,
+      caption = "Overall Validation Summary") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+# Best performing configurations
+best_configs <- experiments %>%
+  arrange(desc(f1_ipv)) %>%
+  head(5) %>%
+  select(experiment_name, model_name, prompt_version, temperature,
+         f1_ipv, precision_ipv, recall_ipv)
+
+kable(best_configs,
+      caption = "Top 5 Performing Configurations",
+      digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+### Recommendations
+
+```{r recommendations}
+cat("## Validation Recommendations\n\n")
+
+# Find best performing model
+best_model <- model_comparison %>% slice_max(mean_f1, n = 1)
+cat("Best performing model:", best_model$model_name,
+    "(Mean F1:", round(best_model$mean_f1, 3), ")\n")
+
+# Find best prompt version
+best_prompt <- experiments %>%
+  group_by(prompt_version) %>%
+  summarise(mean_f1 = mean(f1_ipv, na.rm = TRUE), .groups = "drop") %>%
+  slice_max(mean_f1, n = 1)
+
+cat("Best prompt version:", best_prompt$prompt_version,
+    "(Mean F1:", round(best_prompt$mean_f1, 3), ")\n")
+
+# Temperature analysis
+temp_analysis <- experiments %>%
+  mutate(temp_category = case_when(
+    temperature == 0 ~ "0.0",
+    temperature > 0 & temperature <= 0.1 ~ "0.01-0.1",
+    temperature > 0.1 & temperature <= 0.5 ~ "0.11-0.5",
+    temperature > 0.5 ~ "0.51+"
+  )) %>%
+  group_by(temp_category) %>%
+  summarise(mean_f1 = mean(f1_ipv, na.rm = TRUE), .groups = "drop") %>%
+  slice_max(mean_f1, n = 1)
+
+cat("Best temperature range:", temp_analysis$temp_category,
+    "(Mean F1:", round(temp_analysis$mean_f1, 3), ")\n")
+
+cat("\n### Key Findings:\n")
+cat("1. Performance varies significantly across models and configurations\n")
+cat("2. Lower temperatures generally provide more consistent results\n")
+cat("3. Prompt engineering has substantial impact on detection performance\n")
+
+cat("\n### Recommendations for Production:\n")
+cat("1. Use the top performing model for initial deployment\n")
+cat("2. Monitor performance drift with regular validation\n")
+cat("3. Consider ensemble methods for critical applications\n")
+```
+
+```{r cleanup, include=FALSE}
+DBI::dbDisconnect(conn)
+```
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```

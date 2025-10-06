@@ -15,3 +15,18 @@ List with experiment configuration
 \description{
 Loads and parses YAML configuration file with environment variable expansion
 }
+\examples{
+\dontrun{
+# Load experiment configuration
+config <- load_experiment_config("configs/experiments/exp_037_baseline_v4_t00_medium.yaml")
+
+# Access configuration sections
+cat("Experiment name:", config$experiment$name, "\n")
+cat("Model:", config$model$name, "\n")
+cat("Temperature:", config$model$temperature, "\n")
+
+# Validate configuration
+validate_config(config)
+}
+
+}

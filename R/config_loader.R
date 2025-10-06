@@ -228,6 +228,20 @@ expand_env_vars_recursive <- function(obj) {
 #' @param text Narrative text to insert
 #' @return String with substituted text
 #' @export
+#' @examples
+#' \dontrun{
+#' # Basic substitution
+#' template <- "Analyze this narrative for IPV: <<TEXT>>"
+#' narrative <- "The victim was threatened by her partner."
+#' result <- substitute_template(template, narrative)
+#' print(result)
+#'
+#' # Complex template
+#' template <- "System: You are an IPV expert. User: Analyze: <<TEXT>>"
+#' narrative <- "Shooting occurred following domestic dispute."
+#' result <- substitute_template(template, narrative)
+#' print(result)
+#' }
 substitute_template <- function(template, text) {
   gsub("<<TEXT>>", text, template, fixed = TRUE)
 }

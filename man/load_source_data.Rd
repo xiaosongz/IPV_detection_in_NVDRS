@@ -19,3 +19,20 @@ Number of narratives loaded
 \description{
 Loads Excel file into source_narratives table for efficient querying
 }
+\examples{
+\dontrun{
+# Load NVDRS data from Excel file
+conn <- get_db_connection()
+n_loaded <- load_source_data(conn, "data/nvdrs_narratives.xlsx")
+cat("Loaded", n_loaded, "narratives\n")
+
+# Check if data already loaded
+if (!check_data_loaded(conn, "data/nvdrs_narratives.xlsx")) {
+  load_source_data(conn, "data/nvdrs_narratives.xlsx")
+}
+
+# Force reload existing data
+n_reloaded <- load_source_data(conn, "data/nvdrs_narratives.xlsx", force_reload = TRUE)
+dbDisconnect(conn)
+}
+}

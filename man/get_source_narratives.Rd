@@ -19,3 +19,17 @@ Tibble with narratives
 \description{
 Query narratives from source_narratives table
 }
+\examples{
+\dontrun{
+# Get all narratives
+conn <- get_db_connection()
+narratives <- get_source_narratives(conn)
+print(nrow(narratives))
+
+# Filter by data source
+csv_narratives <- get_source_narratives(conn, data_source = "nvdrs_data.csv")
+
+# Limit for testing
+sample <- get_source_narratives(conn, max_narratives = 10)
+}
+}

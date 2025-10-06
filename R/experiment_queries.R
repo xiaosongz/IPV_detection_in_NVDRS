@@ -6,6 +6,25 @@
 #' @param status Optional status filter ('running', 'completed', 'failed')
 #' @return Tibble with experiment information
 #' @export
+#' @examples
+#' \dontrun{
+#' # List all experiments
+#' conn <- get_db_connection()
+#' experiments <- list_experiments(conn)
+#' print(experiments$experiment_name)
+#'
+#' # List only completed experiments
+#' completed <- list_experiments(conn, status = "completed")
+#' cat("Completed experiments:", nrow(completed), "\n")
+#'
+#' # List running experiments
+#' running <- list_experiments(conn, status = "running")
+#' for (exp in running$experiment_name) {
+#'   cat("Running:", exp, "\n")
+#' }
+#'
+#' dbDisconnect(conn)
+#' }
 list_experiments <- function(conn, status = NULL) {
   query <- "
     SELECT experiment_id, experiment_name, status,
@@ -16,21 +35,21 @@ list_experiments <- function(conn, status = NULL) {
            created_at
     FROM experiments
   "
-  
+
   params <- list()
   if (!is.null(status)) {
     query <- paste(query, "WHERE status = ?")
     params <- list(status)
   }
-  
+
   query <- paste(query, "ORDER BY created_at DESC")
-  
+
   if (length(params) > 0) {
     result <- DBI::dbGetQuery(conn, query, params = params)
   } else {
     result <- DBI::dbGetQuery(conn, query)
   }
-  
+
   tibble::as_tibble(result)
 }
 
@@ -42,6 +61,23 @@ list_experiments <- function(conn, status = NULL) {
 #' @param experiment_id Experiment ID
 #' @return Tibble with narrative results
 #' @export
+#' @examples
+#' \dontrun{
+#' # Get results for a specific experiment
+#' conn <- get_db_connection()
+#' experiment_id <- "your-experiment-id"
+#' results <- get_experiment_results(conn, experiment_id)
+#'
+#' # Analyze detection performance
+#' cat("Total narratives:", nrow(results), "\n")
+#' cat("IPV detected:", sum(results$detected, na.rm = TRUE), "\n")
+#' cat("Manual flags:", sum(results$manual_flag_ind, na.rm = TRUE), "\n")
+#'
+#' # View confidence scores
+#' summary(results$confidence)
+#'
+#' dbDisconnect(conn)
+#' }
 get_experiment_results <- function(conn, experiment_id) {
   query <- "
     SELECT *
@@ -49,7 +85,7 @@ get_experiment_results <- function(conn, experiment_id) {
     WHERE experiment_id = ?
     ORDER BY row_num
   "
-  
+
   result <- DBI::dbGetQuery(conn, query, params = list(experiment_id))
   tibble::as_tibble(result)
 }
@@ -66,10 +102,10 @@ compare_experiments <- function(conn, experiment_ids) {
   if (length(experiment_ids) == 0) {
     stop("No experiment IDs provided")
   }
-  
+
   # Build placeholders for IN clause
   placeholders <- paste(rep("?", length(experiment_ids)), collapse = ", ")
-  
+
   query <- sprintf("
     SELECT experiment_id, experiment_name, model_name, temperature,
            prompt_version, n_narratives_processed,
@@ -81,7 +117,7 @@ compare_experiments <- function(conn, experiment_ids) {
     WHERE experiment_id IN (%s)
     ORDER BY f1_ipv DESC
   ", placeholders)
-  
+
   result <- DBI::dbGetQuery(conn, query, params = as.list(experiment_ids))
   tibble::as_tibble(result)
 }
@@ -103,7 +139,7 @@ find_disagreements <- function(conn, experiment_id, type = "both") {
   } else {
     where_clause <- "(is_false_positive = 1 OR is_false_negative = 1)"
   }
-  
+
   query <- sprintf("
     SELECT incident_id, narrative_type,
            substr(narrative_text, 1, 200) as narrative_preview,
@@ -114,7 +150,7 @@ find_disagreements <- function(conn, experiment_id, type = "both") {
     WHERE experiment_id = ? AND %s
     ORDER BY confidence DESC
   ", where_clause)
-  
+
   result <- DBI::dbGetQuery(conn, query, params = list(experiment_id))
   tibble::as_tibble(result)
 }
@@ -140,7 +176,7 @@ analyze_experiment_errors <- function(conn, experiment_id = NULL) {
       ORDER BY error_count DESC
     "
     errors_summary <- DBI::dbGetQuery(conn, query, params = list(experiment_id))
-    
+
     # Also read error log file if available
     log_file <- here::here("logs", "experiments", experiment_id, "errors.log")
     if (file.exists(log_file)) {
@@ -160,7 +196,7 @@ analyze_experiment_errors <- function(conn, experiment_id = NULL) {
     "
     errors_summary <- DBI::dbGetQuery(conn, query)
   }
-  
+
   tibble::as_tibble(errors_summary)
 }
 
@@ -179,16 +215,16 @@ read_experiment_log <- function(experiment_id, log_type = "main") {
     errors = "errors.log",
     performance = "performance.log"
   )
-  
+
   if (!log_type %in% names(log_files)) {
     stop("Invalid log_type. Must be one of: ", paste(names(log_files), collapse = ", "))
   }
-  
+
   log_path <- here::here("logs", "experiments", experiment_id, log_files[[log_type]])
-  
+
   if (!file.exists(log_path)) {
     stop("Log file not found: ", log_path)
   }
-  
+
   readLines(log_path)
 }

@@ -23,3 +23,21 @@ Tibble with all results
 \description{
 Processes narratives through LLM and logs results to database
 }
+\examples{
+\dontrun{
+# Set up experiment components
+config <- load_experiment_config("configs/experiments/exp_037_baseline_v4_t00_medium.yaml")
+conn <- get_db_connection()
+experiment_id <- start_experiment(conn, config)
+logger <- init_experiment_logger(experiment_id)
+narratives <- get_source_narratives(conn, max_narratives = 10)
+
+# Run benchmark (processes narratives through LLM)
+results <- run_benchmark_core(config, conn, experiment_id, narratives, logger)
+print(nrow(results))
+
+# Finalize experiment
+finalize_experiment(conn, experiment_id)
+dbDisconnect(conn)
+}
+}

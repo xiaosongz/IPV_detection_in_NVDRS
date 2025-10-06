@@ -17,3 +17,23 @@ Tibble with experiment information
 \description{
 Query experiments from database with optional filtering
 }
+\examples{
+\dontrun{
+# List all experiments
+conn <- get_db_connection()
+experiments <- list_experiments(conn)
+print(experiments$experiment_name)
+
+# List only completed experiments
+completed <- list_experiments(conn, status = "completed")
+cat("Completed experiments:", nrow(completed), "\n")
+
+# List running experiments
+running <- list_experiments(conn, status = "running")
+for (exp in running$experiment_name) {
+  cat("Running:", exp, "\n")
+}
+
+dbDisconnect(conn)
+}
+}

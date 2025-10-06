@@ -31,21 +31,10 @@ log ""
 
 # Array of experiment configs
 experiments=(
-  "exp_022_qwen_baseline_t00_medium.yaml"
-  "exp_023_qwen_baseline_t00_high.yaml"
-  "exp_024_qwen_baseline_t02_high.yaml"
-  "exp_025_qwen_indicators_t00_medium.yaml"
   "exp_026_qwen_indicators_t00_high.yaml"
-  "exp_027_qwen_indicators_t02_high.yaml"
-  "exp_028_qwen_strict_t00_medium.yaml"
-  "exp_029_qwen_strict_t00_high.yaml"
   "exp_030_qwen_strict_t02_high.yaml"
   "exp_031_qwen_context_t00_medium.yaml"
-  "exp_032_qwen_context_t00_high.yaml"
-  "exp_033_qwen_context_t02_high.yaml"
   "exp_034_qwen_cot_t00_medium.yaml"
-  "exp_035_qwen_cot_t00_high.yaml"
-  "exp_036_qwen_cot_t02_high.yaml"
 )
 
 # Counter for progress

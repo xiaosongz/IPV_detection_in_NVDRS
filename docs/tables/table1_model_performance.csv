@@ -1,0 +1,4 @@
+"model_name","Experiments","Narratives","Mean F1","SD F1","Mean Precision","Mean Recall","Avg Runtime (s)","Speed (narr/s)"
+"qwen3-next-80b-a3b-thinking-mlx",3,1171,"69.7%","±2.2%","63.2%","77.9%",9897,0.04
+"mlx-community/gpt-oss-120b",35,13972,"68.9%","±8.1%","80.1%","62.6%",2183.2,0.19
+"qwen/qwen3-next-80b",2,808,"54.2%","±5.5%","38.7%","91.7%",761.5,0.53
