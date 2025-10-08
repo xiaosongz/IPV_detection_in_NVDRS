@@ -2,23 +2,40 @@
 # Data loading and narrative retrieval
 
 test_that("load_source_data requires valid Excel file", {
-  con <- create_temp_db()
+  con <- create_temp_db(defer_cleanup = FALSE)
   
   expect_error(
     load_source_data(con, "/nonexistent/file.xlsx"),
     "not found"
   )
   
-  DBI::dbDisconnect(con)
+  safe_db_disconnect(con)
 })
 
 test_that("load_source_data loads narratives into database", {
-  skip("Need Excel fixture file")
-  # Will implement when Excel fixture is created
+  con <- create_temp_db(defer_cleanup = FALSE)
+  fixtures <- local_excel_fixtures()
+  
+  # Load valid Excel data
+  n_loaded <- load_source_data(con, fixtures$valid)
+  
+  expect_equal(n_loaded, 3)
+  
+  # Verify data was loaded correctly
+  count <- DBI::dbGetQuery(con, "SELECT COUNT(*) as n FROM source_narratives")$n
+  expect_equal(count, 3)
+  
+  # Verify specific content
+  result <- DBI::dbGetQuery(con, "SELECT incident_id, narrative_type, manual_flag_ind FROM source_narratives ORDER BY incident_id")
+  expect_equal(result$incident_id, c("INC001", "INC002", "INC003"))
+  expect_equal(result$narrative_type, c("LE", "CME", "LE"))
+  expect_equal(result$manual_flag_ind, c(1, 0, 1))
+  
+  safe_db_disconnect(con)
 })
 
 test_that("load_source_data respects force_reload=FALSE", {
-  con <- create_temp_db()
+  con <- create_temp_db(defer_cleanup = FALSE)
   
   # Load sample narratives
   narratives <- create_sample_narratives(5)
@@ -28,7 +45,7 @@ test_that("load_source_data respects force_reload=FALSE", {
   count1 <- DBI::dbGetQuery(con, "SELECT COUNT(*) as n FROM source_narratives")$n
   expect_equal(count1, 5)
   
-  DBI::dbDisconnect(con)
+  safe_db_disconnect(con)
 })
 
 test_that("load_source_data with force_reload=TRUE deletes existing data", {
@@ -164,9 +181,35 @@ test_that("get_source_narratives preserves manual flags", {
 })
 
 test_that("load_source_data handles empty Excel files", {
-  skip("Need empty Excel fixture")
+  con <- create_temp_db(defer_cleanup = FALSE)
+  fixtures <- local_excel_fixtures()
+  
+  # Load empty Excel file
+  n_loaded <- load_source_data(con, fixtures$empty)
+  
+  # Empty file should load 0 rows
+  expect_equal(n_loaded, 0)
+  
+  # Verify no data was loaded
+  count <- DBI::dbGetQuery(con, "SELECT COUNT(*) as n FROM source_narratives")$n
+  expect_equal(count, 0)
+  
+  safe_db_disconnect(con)
 })
 
 test_that("load_source_data handles malformed Excel files", {
-  skip("Need malformed Excel fixture")
+  con <- create_temp_db(defer_cleanup = FALSE)
+  fixtures <- local_excel_fixtures()
+  
+  # Expect error when loading malformed Excel file
+  expect_error(
+    load_source_data(con, fixtures$malformed),
+    class = "error"
+  )
+  
+  # Verify no data was loaded after error
+  count <- DBI::dbGetQuery(con, "SELECT COUNT(*) as n FROM source_narratives")$n
+  expect_equal(count, 0)
+  
+  safe_db_disconnect(con)
 })
