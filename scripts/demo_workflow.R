@@ -373,7 +373,7 @@ tryCatch(
 )
 
 demo_time <- toc(log = FALSE)
-cat("\nDemo completed in", round(as.numeric(demo_time), 2), "seconds\n")
+cat("\nDemo completed in", round(demo_time$toc, 2), "seconds\n")
 
 # Generate basic metrics
 cat("\nStep 8: Generating demo metrics...\n")
