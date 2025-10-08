@@ -273,11 +273,65 @@ test_that("log_message handles different log levels", {
 })
 
 test_that("finalize_experiment saves CSV output when requested", {
-  skip("Need file output implementation")
+  con <- create_temp_db()
+  config <- mock_config()
+  experiment_id <- start_experiment(con, config)
+  
+  # Log some test results
+  log_narrative_result(con, experiment_id, list(
+    incident_id = "TEST001",
+    detected = 1,
+    confidence = 0.9,
+    indicators = list("threat", "isolation")
+  ))
+  
+  # Test CSV export
+  withr::local_tempdir({
+    files <- save_experiment_results(experiment_id, format = "csv", output_dir = getwd())
+    
+    expect_true(file.exists(files$csv))
+    expect_true(grepl("\\.csv$", files$csv))
+    
+    # Verify CSV content
+    csv_data <- read.csv(files$csv)
+    expect_equal(nrow(csv_data), 1)
+    expect_equal(csv_data$incident_id, "TEST001")
+    expect_equal(csv_data$detected, 1)
+    expect_true(grepl("threat; isolation", csv_data$indicators))
+  })
+  
+  safe_db_disconnect(con)
 })
 
 test_that("finalize_experiment saves JSON output when requested", {
-  skip("Need file output implementation")
+  con <- create_temp_db()
+  config <- mock_config()
+  experiment_id <- start_experiment(con, config)
+  
+  # Log some test results
+  log_narrative_result(con, experiment_id, list(
+    incident_id = "TEST002",
+    detected = 0,
+    confidence = 0.1,
+    indicators = list()
+  ))
+  
+  # Test JSON export
+  withr::local_tempdir({
+    files <- save_experiment_results(experiment_id, format = "json", output_dir = getwd())
+    
+    expect_true(file.exists(files$json))
+    expect_true(grepl("\\.json$", files$json))
+    
+    # Verify JSON content
+    json_data <- jsonlite::fromJSON(files$json)
+    expect_equal(nrow(json_data), 1)
+    expect_equal(json_data$incident_id, "TEST002")
+    expect_equal(json_data$detected, 0)
+    expect_equal(json_data$indicators, list())  # Empty list should be preserved
+  })
+  
+  safe_db_disconnect(con)
 })
 
 test_that("log_narrative_result handles error cases", {

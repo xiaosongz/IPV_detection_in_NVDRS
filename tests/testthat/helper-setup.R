@@ -21,13 +21,16 @@ source(here::here("R", "parse_llm_result.R"), local = TRUE)
 source(here::here("R", "repair_json.R"), local = TRUE)
 source(here::here("R", "run_benchmark_core.R"), local = TRUE)
 source(here::here("tests/testthat/helper-mocks.R"), local = TRUE)
+source(here::here("tests/testthat/helper-excel-fixtures.R"), local = TRUE)
 
 #' Create a temporary in-memory database for testing
 #'
 #' @param initialize If TRUE, run init_experiment_db()
+#' @param defer_cleanup If TRUE, register automatic cleanup with withr::defer()
+#' @param defer_env Environment to register cleanup in
 #' @return Database connection
 #' @export
-create_temp_db <- function(initialize = TRUE, defer_env = parent.frame()) {
+create_temp_db <- function(initialize = TRUE, defer_cleanup = TRUE, defer_env = parent.frame()) {
   con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
 
   if (initialize) {
@@ -37,7 +40,9 @@ create_temp_db <- function(initialize = TRUE, defer_env = parent.frame()) {
   }
 
   # Register cleanup in provided environment (ensures proper lifecycle in nested helpers)
-  withr::defer(DBI::dbDisconnect(con), envir = defer_env)
+  if (defer_cleanup) {
+    withr::defer(DBI::dbDisconnect(con), envir = defer_env)
+  }
 
   return(con)
 }
@@ -243,6 +248,31 @@ skip_if_not_smoke <- function() {
 #' @export
 with_temp_dir <- function(code) {
   withr::with_tempdir(code)
+}
+
+#' Safely disconnect database connection
+#'
+#' Checks if connection is valid before disconnecting to avoid warnings
+#'
+#' @param conn Database connection
+#' @return TRUE if disconnected successfully, FALSE otherwise
+#' @export
+safe_db_disconnect <- function(conn) {
+  if (!inherits(conn, "DBIConnection")) {
+    return(FALSE)
+  }
+  
+  tryCatch({
+    if (DBI::dbIsValid(conn)) {
+      DBI::dbDisconnect(conn)
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
+  }, error = function(e) {
+    # Connection already closed or invalid
+    return(FALSE)
+  })
 }
 
 #' Silence messages during test

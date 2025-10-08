@@ -520,3 +520,120 @@ log_message <- function(file_path, level, msg) {
   log_line <- sprintf("[%s] [%s] %s", timestamp, level, msg)
   cat(log_line, "\n", file = file_path, append = TRUE)
 }
+
+#' Save Experiment Results to CSV/JSON Files
+#'
+#' Exports experiment results to CSV and/or JSON format with proper formatting
+#'
+#' @param experiment_id Character string. The experiment identifier
+#' @param format Character. Output format: "csv", "json", or "both" (default: "both")
+#' @param output_dir Character. Directory to save files (default: benchmark_results/)
+#' @param timestamp Character. Optional timestamp for filenames (default: current time)
+#'
+#' @return Named list with file paths (or NULL if not saved)
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Save experiment results in both formats
+#' files <- save_experiment_results("exp-123-456", format = "both")
+#' 
+#' # Save only CSV
+#' csv_file <- save_experiment_results("exp-123-456", format = "csv")
+#' 
+#' # Save to custom directory
+#' files <- save_experiment_results("exp-123-456", output_dir = "custom_output")
+#' }
+save_experiment_results <- function(experiment_id, 
+                                  format = c("both", "csv", "json"),
+                                  output_dir = here::here("benchmark_results"),
+                                  timestamp = format(Sys.time(), "%Y%m%d_%H%M%S")) {
+  
+  format <- match.arg(format)
+  
+  # Create output directory if it doesn't exist
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  }
+  
+  # Get experiment results from database
+  conn <- get_db_connection()
+  on.exit(DBI::dbDisconnect(conn), add = TRUE)
+  
+  results <- get_experiment_results(conn, experiment_id)
+  
+  output_files <- list()
+  base_filename <- paste0("experiment_", experiment_id, "_", timestamp)
+  
+  if (nrow(results) == 0) {
+    # Create empty result structure for consistent return value
+    empty_results <- data.frame(
+      experiment_id = character(0),
+      incident_id = character(0),
+      narrative_type = character(0),
+      detected = logical(0),
+      confidence = numeric(0),
+      indicators = I(list()),
+      stringsAsFactors = FALSE
+    )
+    
+    # Create empty files for consistency
+    if (format %in% c("csv", "both")) {
+      csv_path <- file.path(output_dir, paste0(base_filename, ".csv"))
+      write.csv(empty_results, csv_path, row.names = FALSE)
+      output_files$csv <- csv_path
+    }
+    
+    if (format %in% c("json", "both")) {
+      json_path <- file.path(output_dir, paste0(base_filename, ".json"))
+      jsonlite::write_json(empty_results, json_path, pretty = TRUE, auto_unbox = TRUE)
+      output_files$json <- json_path
+    }
+    
+    return(invisible(output_files))
+  }
+  
+  # Save CSV format
+  if (format %in% c("csv", "both")) {
+    csv_path <- file.path(output_dir, paste0(base_filename, ".csv"))
+    
+    # Prepare results for CSV (flatten list columns)
+    csv_data <- results
+    
+    # Convert list columns to strings
+    list_columns <- names(results)[sapply(results, is.list)]
+    for (col in list_columns) {
+      if (col == "indicators") {
+        csv_data[[col]] <- sapply(results[[col]], function(x) {
+          if (is.null(x) || length(x) == 0) "" else paste(x, collapse = "; ")
+        })
+      } else {
+        csv_data[[col]] <- sapply(results[[col]], function(x) {
+          if (is.null(x)) "" else paste(unlist(x), collapse = "; ")
+        })
+      }
+    }
+    
+    write.csv(csv_data, csv_path, row.names = FALSE, na = "")
+    output_files$csv <- csv_path
+  }
+  
+  # Save JSON format
+  if (format %in% c("json", "both")) {
+    json_path <- file.path(output_dir, paste0(base_filename, ".json"))
+    
+    # Prepare results for JSON (handle list objects properly)
+    json_data <- results
+    
+    # Convert POSIXct to character for JSON compatibility
+    date_columns <- names(results)[sapply(results, function(x) inherits(x, "POSIXct"))]
+    for (col in date_columns) {
+      json_data[[col]] <- as.character(results[[col]])
+    }
+    
+    jsonlite::write_json(json_data, json_path, pretty = TRUE, auto_unbox = TRUE, na = "null")
+    output_files$json <- json_path
+  }
+  
+  return(invisible(output_files))
+}
