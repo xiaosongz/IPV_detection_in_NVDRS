@@ -160,9 +160,14 @@ log_narrative_result <- function(conn, experiment_id, result) {
   response_sec_val  <- as_num1(result$response_sec)
 
   # Error flags: accept either parse_error or error_occurred
-  parse_err_val     <- as_logi1(result$parse_error, default = FALSE)
-  error_occ_input   <- as_logi1(result$error_occurred, default = FALSE)
-  error_occurred    <- as.integer(isTRUE(parse_err_val) || isTRUE(error_occ_input))
+  # Avoid tibble warning when column is absent by checking names first
+  parse_err_val <- as_logi1(result$parse_error, default = FALSE)
+  error_occ_input <- if ("error_occurred" %in% names(result)) {
+    as_logi1(result$error_occurred, default = FALSE)
+  } else {
+    FALSE
+  }
+  error_occurred <- as.integer(isTRUE(parse_err_val) || isTRUE(error_occ_input))
   error_message_val <- as_chr1(result$error_message)
 
   DBI::dbExecute(conn,
