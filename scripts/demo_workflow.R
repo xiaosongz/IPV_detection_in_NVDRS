@@ -101,7 +101,6 @@ library(here)
 library(DBI)
 library(RSQLite)
 library(tictoc)
-library(dotenv)
 
 cat("\n")
 cat("================================================================================\n")
@@ -113,8 +112,23 @@ cat("No NVDRS access or sensitive data required.\n\n")
 # Load environment variables
 cat("Step 1: Loading environment configuration...\n")
 if (file.exists(".env")) {
-  dotenv::load_dotenv(".env")
-  cat("✓ Environment loaded from .env\n")
+  if (requireNamespace("dotenv", quietly = TRUE)) {
+    # Try different function names based on dotenv version
+    tryCatch({
+      if ("load_dotenv" %in% ls("package:dotenv")) {
+        dotenv::load_dotenv(".env")
+      } else {
+        # Fallback for newer versions
+        dotenv::dotenv_load(".env")
+      }
+      cat("✓ Environment loaded from .env\n")
+    }, error = function(e) {
+      cat("⚠ Error loading .env file:", e$message, "\n")
+      cat("  Using default environment variables.\n")
+    })
+  } else {
+    cat("⚠ dotenv package not available, using defaults\n")
+  }
 } else {
   cat("⚠ No .env file found. Using defaults.\n")
   cat("  Copy .env.example to .env and configure for full functionality.\n")
@@ -255,8 +269,8 @@ Your response must be valid JSON parseable by JSON.parse()'
   run = list(
     seed = 1024,
     max_narratives = 10, # Small sample for demo
-    save_incremental = true,
-    save_csv_json = true
+    save_incremental = TRUE,
+    save_csv_json = TRUE
   )
 )
 
@@ -348,7 +362,7 @@ tryCatch(
     }
 
     # Complete experiment
-    complete_experiment(conn, experiment_id, results)
+    finalize_experiment(conn, experiment_id)
     cat("✓ Experiment completed successfully\n")
   },
   error = function(e) {
@@ -359,7 +373,7 @@ tryCatch(
 )
 
 demo_time <- toc(log = FALSE)
-cat("\nDemo completed in", round(demo_time$tictoc, 2), "seconds\n")
+cat("\nDemo completed in", round(demo_time$toc, 2), "seconds\n")
 
 # Generate basic metrics
 cat("\nStep 8: Generating demo metrics...\n")

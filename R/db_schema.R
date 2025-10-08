@@ -141,6 +141,7 @@ init_experiment_db <- function(db_path = NULL) {
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_exp_tokens ON narrative_results(experiment_id, tokens_used)")
 
   ensure_token_columns(conn)
+  ensure_error_columns(conn)
 
   return(conn)
 }
@@ -174,6 +175,7 @@ get_db_connection <- function(db_path = NULL) {
   conn <- DBI::dbConnect(RSQLite::SQLite(), db_path)
   DBI::dbExecute(conn, "PRAGMA foreign_keys = ON")
   ensure_token_columns(conn)
+  ensure_error_columns(conn)
 
   return(conn)
 }
@@ -195,4 +197,25 @@ ensure_token_columns <- function(conn) {
   add_if_missing("prompt_tokens", "ALTER TABLE narrative_results ADD COLUMN prompt_tokens INTEGER")
   add_if_missing("completion_tokens", "ALTER TABLE narrative_results ADD COLUMN completion_tokens INTEGER")
   add_if_missing("tokens_used", "ALTER TABLE narrative_results ADD COLUMN tokens_used INTEGER")
+}
+
+#' Ensure error columns exist on legacy databases
+#'
+#' Adds error tracking columns if missing (for pre-upgrade DBs).
+#'
+#' @param conn DBI connection
+ensure_error_columns <- function(conn) {
+  existing_cols <- DBI::dbGetQuery(conn, "PRAGMA table_info(narrative_results)")
+
+  add_if_missing <- function(column_name, sql) {
+    if (!column_name %in% existing_cols$name) {
+      DBI::dbExecute(conn, sql)
+    }
+  }
+
+  add_if_missing("error_occurred", "ALTER TABLE narrative_results ADD COLUMN error_occurred INTEGER DEFAULT 0")
+  add_if_missing("error_message", "ALTER TABLE narrative_results ADD COLUMN error_message TEXT")
+
+  # Ensure index exists if the column was just added
+  DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_error ON narrative_results(error_occurred)")
 }
