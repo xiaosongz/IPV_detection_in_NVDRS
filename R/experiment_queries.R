@@ -87,6 +87,26 @@ get_experiment_results <- function(conn, experiment_id) {
   "
 
   result <- DBI::dbGetQuery(conn, query, params = list(experiment_id))
+
+  # Ensure expected columns exist for downstream code that may reference them
+  # This guards against older databases or partial migrations where
+  # columns like `error_occurred` may be absent.
+  if (!"error_occurred" %in% names(result)) {
+    result$error_occurred <- 0L
+  }
+  if (!"is_true_positive" %in% names(result)) {
+    result$is_true_positive <- NA_integer_
+  }
+  if (!"is_true_negative" %in% names(result)) {
+    result$is_true_negative <- NA_integer_
+  }
+  if (!"is_false_positive" %in% names(result)) {
+    result$is_false_positive <- NA_integer_
+  }
+  if (!"is_false_negative" %in% names(result)) {
+    result$is_false_negative <- NA_integer_
+  }
+
   tibble::as_tibble(result)
 }
 
