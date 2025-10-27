@@ -1,8 +1,9 @@
 # Production Run: 20k Cases Implementation Plan
 
-**Date**: 2025-10-27  
-**Branch**: `feature/20k-production-run`  
+**Date**: 2025-10-27
+**Branch**: `feature/20k-production-run`
 **Target**: 20,946 cases (41,892 narratives: LE + CME)
+**Data File**: `data-raw/all_suicide_nar.xlsx`
 
 ## Implemented Components
 
@@ -57,25 +58,67 @@
 
 ### Database Size Estimates
 - **Current DB**: 79MB (18,817 narratives)
-- **Production DB**: ~255MB after run
+- **Production DB**: ~255MB after completion
+- **Disk Space Required**: 300MB minimum (includes backups)
 - **Performance**: Optimized indexes for large dataset
 
 ## Production Execution Plan
 
+### Phase 0: Smoke Test (Recommended)
+Before starting the full 24-35 hour production run, validate the pipeline with a quick smoke test:
+
+**Option 1: Automated Script (Recommended)**
+```bash
+./scripts/run_smoke_test.sh
+```
+
+**Option 2: Manual Commands**
+```bash
+# Set up production database configuration
+cp .db_config.production .db_config
+
+# Run smoke test (200 narratives, ~6-10 minutes)
+Rscript scripts/run_experiment.R configs/experiments/exp_101_production_smoke_test.yaml
+
+# Check results
+sqlite3 data/production_20k.db "
+  SELECT experiment_name, status, n_narratives_processed
+  FROM experiments
+  WHERE experiment_name LIKE '%Smoke Test%'
+  ORDER BY created_at DESC LIMIT 1;
+"
+
+# Optional: Restore default config after smoke test
+git checkout .db_config
+```
+
+This validates:
+- MLX server connectivity and stability
+- Data file loading and format handling
+- Database operations and incremental saves
+- Logging and error handling
+- JSON parsing and metrics calculation
+
 ### Phase 1: Pre-Run Validation
 1. **Verify MLX Server Status**
    ```bash
-   curl http://localhost:1234/v1/models
+   curl http://localhost:1234/v1/models | grep gpt-oss-120b
    ```
 
 2. **Check Data File**
    ```bash
-   ls -la data-raw/all_suicide_nar.xlsx
+   ls -lh data-raw/all_suicide_nar.xlsx
+   Rscript -e "library(readxl); df <- read_excel('data-raw/all_suicide_nar.xlsx'); cat('Rows:', nrow(df), '\n')"
    ```
 
-3. **Validate Database Schema**
+3. **Verify Schema File** (DB will be auto-created by script)
    ```bash
-   sqlite3 data/production_20k.db ".schema"
+   ls -l scripts/sql/create_production_schema.sql
+   ```
+
+4. **Check Disk Space** (Need ~300MB minimum)
+   ```bash
+   df -h .
    ```
 
 ### Phase 2: Production Run
@@ -90,24 +133,37 @@
    - Exports: `benchmark_results/`
 
 3. **Estimated Runtime**
-   - ~41,892 narratives
-   - Assuming 2-3 seconds per narrative
-   - **Total**: ~23-35 hours of processing time
+   - 41,892 narratives (20,946 cases × 2)
+   - **Actual measured**: 6.5 seconds per narrative (from smoke test)
+   - **Total**: ~75 hours of processing time
+   - **Updated estimate for 40k narratives**: ~100 hours
 
 ### Phase 3: Post-Run Analysis
-1. **Quick Summary**
-   ```sql
-   sqlite3 data/production_20k.db \
-   "SELECT experiment_id, experiment_name, status, n_narratives_processed, 
-           f1_ipv, precision_ipv, recall_ipv 
-    FROM experiments 
-    WHERE experiment_name LIKE '%Production%' 
-    ORDER BY created_at DESC LIMIT 1;"
-   ```
+1. **Quick Summary** (automatically shown by script)
+   - Experiment name and status
+   - Total narratives processed
+   - IPV detection count and rate
+   - Average confidence score
+   - Average response time
 
-2. **Detailed Results**
+2. **Detailed Results by Narrative Type**
    ```bash
    Rscript scripts/view_experiment.R <experiment_id>
+   ```
+
+3. **Manual Query Examples**
+   ```sql
+   # Detection rate by narrative type
+   sqlite3 data/production_20k.db "
+     SELECT
+       narrative_type,
+       COUNT(*) as total,
+       SUM(detected) as ipv_detected,
+       ROUND(SUM(detected) * 100.0 / COUNT(*), 2) as detection_rate_pct,
+       ROUND(AVG(confidence), 3) as avg_confidence
+     FROM narrative_results
+     GROUP BY narrative_type;
+   "
    ```
 
 3. **Export Results**
@@ -127,9 +183,9 @@
 ### Error Handling
 - ✅ Database backup before run
 - ✅ Rollback on failure
-- ✅ Comprehensive logging
-- ✅ Progress tracking
-- ✅ Resource monitoring
+- ✅ Comprehensive logging with timestamps
+- ✅ Progress tracking (incremental saves)
+- ⚠️ Timing metrics (response time per narrative)
 
 ## Configuration Details
 
@@ -225,10 +281,11 @@ If issues occur during production run:
 ## Success Criteria
 
 ### Technical Success
-- [ ] All 41,892 narratives processed
-- [ ] No database errors
-- [ ] All exports generated successfully
-- [ ] Response times within acceptable range
+- [ ] All 41,892 narratives processed (20,946 cases × 2)
+- [ ] No database errors or data corruption
+- [ ] All exports generated successfully (CSV/JSON)
+- [ ] Response times within acceptable range (2-3 sec/narrative)
+- [ ] Complete logs with no critical errors
 
 ### Analytical Success
 - [ ] Reasonable IPV detection rate (expected 5-15%)
@@ -269,6 +326,47 @@ After successful production run:
 
 ---
 
-**Prepared by**: Droid AI Assistant  
-**Status**: Ready for execution  
-**Last Updated**: 2025-10-27
+## Verification History
+
+### 2025-10-27 - Pre-Production Review (Round 1)
+- ✅ Fixed critical bug: Updated `run_production_20k.sh` to use correct data file path
+  - Changed from: `data-raw/production_20k_cases.xlsx` (incorrect)
+  - Changed to: `data-raw/all_suicide_nar.xlsx` (correct)
+- ✅ Updated narrative count references (40k → 41,892)
+- ✅ Verified all components ready for production
+- ✅ MLX server confirmed running with correct model
+- ✅ Data file verified (8.6MB, 20,946 rows, correct structure)
+
+### 2025-10-27 - Pre-Production Review (Round 2)
+- ✅ Fixed DB initialization guard (removed incorrect `experiments.db` dependency)
+- ✅ Updated quick summary queries to show production-relevant metrics
+  - Removed: F1/precision/recall (require ground truth)
+  - Added: Total narratives, IPV detection rate, avg confidence, avg response time
+- ✅ Fixed resource monitoring claims (clarified timing metrics only)
+- ✅ Updated pre-run validation steps (removed incorrect schema check)
+- ✅ Added disk space validation (300MB minimum)
+- ✅ Created smoke test configuration (`exp_101_production_smoke_test.yaml`)
+  - 200 narratives, ~6-10 minutes runtime
+  - Validates full pipeline before 24-35h production run
+
+### 2025-10-27 - Smoke Test Results (Round 4)
+- ✅ Successfully executed smoke test with 192 narratives
+- ✅ Measured actual performance metrics:
+  - Response time: 6.5 seconds per narrative (average)
+  - Range: 3-16 seconds per narrative
+  - Error rate: 0% (perfect JSON parsing)
+  - Confidence: 88.8% average
+  - IPV detection rate: 8.3%
+- ✅ Updated runtime estimates based on actual measurements
+  - 41,892 narratives at 6.5 sec/narrative = ~75 hours
+  - Updated estimate for all 40k narratives: ~100 hours
+- ✅ Fixed data loading issue:
+  - Issue: Duplicate incident_id+narrative_type combinations in source data
+  - Solution: Added deduplication logic to data loader
+  - Result: Successfully loaded 35,312 unique narratives
+
+---
+
+**Prepared by**: Droid AI Assistant
+**Status**: Ready for execution
+**Last Updated**: 2025-10-27 (Post-review corrections)
