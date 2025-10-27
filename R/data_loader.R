@@ -52,33 +52,70 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
   cat("Loading data from:", excel_path, "\n")
   data <- readxl::read_excel(excel_path)
 
-  # Ensure incident IDs are treated as character strings
-  data <- dplyr::mutate(
-    data,
-    IncidentID = dplyr::if_else(
-      is.na(IncidentID),
-      NA_character_,
-      as.character(IncidentID)
+  # Handle different file formats
+  if (all(c("IncidentID", "NarrativeCME", "NarrativeLE") %in% names(data))) {
+    # New format: all_suicide_nar.xlsx structure
+    cat("Detected new format: IncidentID, NarrativeCME, NarrativeLE\n")
+    
+    # Ensure incident IDs are treated as character strings
+    data <- dplyr::mutate(
+      data,
+      IncidentID = dplyr::if_else(
+        is.na(IncidentID),
+        NA_character_,
+        as.character(IncidentID)
+      )
     )
-  )
 
-  # Transform to long format (avoid %>% pipe issues)
-  data_long <- tidyr::pivot_longer(
-    data,
-    cols = c(NarrativeCME, NarrativeLE),
-    names_to = "Type",
-    values_to = "Narrative"
-  )
+    # Transform to long format (avoid %>% pipe issues)
+    data_long <- tidyr::pivot_longer(
+      data,
+      cols = c(NarrativeCME, NarrativeLE),
+      names_to = "Type",
+      values_to = "Narrative"
+    )
 
-  data_long <- dplyr::mutate(
-    data_long,
-    narrative_type = tolower(gsub("Narrative", "", Type)),
-    manual_flag_ind = dplyr::case_when(
-      narrative_type == "cme" ~ as.integer(as.logical(ipv_manualCME)),
-      narrative_type == "le" ~ as.integer(as.logical(ipv_manualLE))
-    ),
-    manual_flag = as.integer(as.logical(ipv_manual))
-  )
+    data_long <- dplyr::mutate(
+      data_long,
+      narrative_type = tolower(gsub("Narrative", "", Type)),
+      manual_flag_ind = NA_integer_,  # No manual flags in production data
+      manual_flag = NA_integer_       # No manual flags in production data
+    )
+    
+  } else if (all(c("IncidentID", "ipv_manualCME", "ipv_manualLE") %in% names(data))) {
+    # Legacy format: suicide_IPV_manuallyflagged.xlsx structure
+    cat("Detected legacy format with manual flags\n")
+    
+    # Ensure incident IDs are treated as character strings
+    data <- dplyr::mutate(
+      data,
+      IncidentID = dplyr::if_else(
+        is.na(IncidentID),
+        NA_character_,
+        as.character(IncidentID)
+      )
+    )
+
+    # Transform to long format (avoid %>% pipe issues)
+    data_long <- tidyr::pivot_longer(
+      data,
+      cols = c(NarrativeCME, NarrativeLE),
+      names_to = "Type",
+      values_to = "Narrative"
+    )
+
+    data_long <- dplyr::mutate(
+      data_long,
+      narrative_type = tolower(gsub("Narrative", "", Type)),
+      manual_flag_ind = dplyr::case_when(
+        narrative_type == "cme" ~ as.integer(as.logical(ipv_manualCME)),
+        narrative_type == "le" ~ as.integer(as.logical(ipv_manualLE))
+      ),
+      manual_flag = as.integer(as.logical(ipv_manual))
+    )
+  } else {
+    stop("Unrecognized file format. Expected either (IncidentID, NarrativeCME, NarrativeLE) or legacy format with manual flags.")
+  }
 
   data_long <- dplyr::select(
     data_long,
