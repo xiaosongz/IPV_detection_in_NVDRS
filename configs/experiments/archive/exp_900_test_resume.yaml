@@ -1,0 +1,72 @@
+experiment:
+  name: "Test Resumable Runs"
+  author: "system"
+  notes: "Test configuration for resumable production runs feature"
+
+model:
+  name: "mlx-community/gpt-oss-120b"
+  provider: "mlx"
+  api_url: "http://localhost:1234/v1/chat/completions"
+  temperature: 0.1
+
+prompt:
+  version: "v2.1_andrea"
+  system_prompt: |
+    /think hard!
+    ROLE: Identify if the deceased was the VICTIM of intimate partner violence (IPV).
+
+    SCOPE: 
+    - IPV from: current/former partner, boyfriend/girlfriend, spouse, ex, father of victim's children
+    - NOT from: victim's parents or family members
+    - Use ONLY narrative facts
+    - Women's shelter = strong IPV evidence
+    - "domestic issues" = IPV
+
+    INDICATORS (use exact tokens):
+      - behavioral: "domestic violence history", "domestic issues", "women's shelter", "restraining order", "stalking", "jealousy/control", "recent separation", "threats", "custody dispute", "financial control", "sexual exploitation"
+     - physical: "multiple-stage injuries", "defensive wounds", "strangulation marks", "pattern injury", "genital trauma", "prior injuries"
+     - contextual: "partner's weapon", "shared residence", "witness reports", "note mentions partner", "police DV report", "prior DV arrest"
+
+    DETECTION (detected=true when):
+      A. Any abuse/assault BY partner against deceased victim OR
+      B. deceased victim has women's shelter stay OR legal evidence (restraining order, DV report/arrest) OR
+      C. "Domestic issues" where deceased was victim of IPV OR
+      D. 2 or more other indicators suggesting deceased was a victim of IPV 
+
+    CONFIDENCE:
+      - HIGH (0.70-1.00): Women's shelter, legal evidence, explicit abuse, or 2+ strong indicators
+      - MODERATE (0.30-0.69): Single indicator or ambiguous evidence
+      - LOW (0.00-0.29): No indicators or deceased was perpetrator
+
+    OUTPUT: Single JSON with detected:boolean, confidence:number, indicators:array (0-5 items from vocab), rationale:string (≤200 chars)
+
+  user_template: |
+    Analyze if the deceased was VICTIM of IPV from intimate partner.
+
+    Narrative:
+    <<TEXT>>
+
+    Return valid JSON (examples):
+    {"detected": true, "confidence": 0.85, "indicators": ["domestic violence history"], "rationale": "..."}
+    {"detected": false, "confidence": 0.9, "indicators": [], "rationale": "..."}
+
+    Rules:
+    - confidence must be a number: 0.9, 0.75, 0.85
+    - Never spell out: "0.nine" is INVALID
+
+    Required format:
+    {
+      "detected": true/false,
+      "confidence": 0.00-1.00,
+      "indicators": ["exact tokens from vocab list"],
+      "rationale": "≤200 char fact-based explanation"
+    }
+
+data:
+  file: "data-raw/suicide_IPV_manuallyflagged.xlsx"
+
+run:
+  seed: 123
+  max_narratives: 20  # Small test set
+  save_incremental: true
+  save_csv_json: true
