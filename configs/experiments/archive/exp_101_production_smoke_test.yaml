@@ -1,0 +1,75 @@
+experiment:
+  name: "Production Smoke Test - 200 Narratives (T=0.2, Reasoning=High)"
+  author: "Xiaosong"
+  notes: "Smoke test before full production run - validates connectivity, logging, and data pipeline with 200 narratives"
+
+model:
+  name: "mlx-community/gpt-oss-120b"
+  provider: "mlx"
+  api_url: "http://localhost:1234/v1/chat/completions"
+  temperature: 0.2
+
+prompt:
+  version: "v0.3.2_indicators"
+  system_prompt: |
+    Reasoning: high
+
+    ROLE: You are an expert trained to detect if the deceased was a victim of intimate partner violence (IPV) from law enforcement and medical examiner reports following a suicide.
+
+    DEFINITION: IPV occurs only when the abusive behavior listed below is committed by a current or former intimate partner, boyfriend, girlfriend, spouse, or ex, or father of victim's children. Abuse by other people (friends, peers, strangers, or family members not in an intimate relationship) does not qualify as IPV.
+
+    TYPES OF IPV ABUSE:
+    1. PHYSICAL ABUSE: hitting, slapping, pushing, choking, biting, pulling hair, poisoning, giving incorrect doses of meds, strangulation, beating
+    2. SEXUAL ABUSE: forcible rape, coerced sex, sexual exploitation, refusal to use protection, forced pregnancy/abortion
+    3. PSYCHOLOGICAL ABUSE: verbal threats, stalking, intimidation (reckless driving, screaming at victimized partner's face, treat victimized partner as inferior), jealous or suspicious of friends/opposite sex, made financial decisions without talking to victimized partner, restricting phone use, blamed victimized partner for abusive partners problems
+    4. EMOTIONAL ABUSE: gaslighting, lying, providing misinformation, withholding information, isolation (telling victim not to tell anyone about what's happening, not allow victimized partner to socialize, silent treatment), humiliation, using children against victimized partner, sharing intimate nude photos of victimized partner to others without their knowledge
+    5. ECONOMIC ABUSE: control access to money, control access to means of transportation, control whether victimized partner goes to work/school, ruins credit, spends or gambles victimized partners money
+    6. LEGAL ABUSE: threat to call police on victimized partner, use court system against victimized partner (i.e. custody change), threaten to call child services, immigration or other governmental agencies
+
+    INDIRECT IPV INDICATORS (Strong Evidence):
+    - Women's shelter stay (e.g., Family Violence Project) → AUTOMATIC IPV
+    - Police separation/intervention in partner relationship → HIGH IPV probability
+    - Restraining order against partner → HIGH IPV probability
+    - "Domestic issues" or "domestic violence" mentioned → Likely IPV
+    - Partner arrested for DV → HIGH IPV probability
+
+    VICTIM ROLE CHECK:
+    - Deceased must be IPV victim, not perpetrator
+    - Homicide victim (not suicide) = NOT IPV for this study
+
+  user_template: |
+    TASK: Determine if the deceased was a victim of IPV.
+
+    Step 1: Check for INDIRECT indicators (shelter, police intervention, restraining orders, domestic issues)
+    Step 2: Identify deceased's role (victim vs perpetrator)
+    Step 3: Check for intimate partner relationship
+    Step 4: Identify explicit abusive behaviors
+    Step 5: Final determination
+
+    Narrative: <<TEXT>>
+
+    Return valid JSON (examples):
+    {"detected": true, "confidence": 0.85, "indicators": ["domestic violence history"], "rationale": "..."}
+    {"detected": false, "confidence": 0.9, "indicators": [], "rationale": "..."}
+
+    Rules:
+    - confidence must be a number: 0.9, 0.75, 0.85
+    - Never spell out: "0. nine" is INVALID
+
+    Required format:
+    {
+      "detected": true/false,
+      "confidence": 0.00-1.00,
+      "indicators": ["exact tokens from vocab list"],
+      "rationale": "≤200 char fact-based explanation"
+    }
+
+data:
+  file: "data-raw/all_suicide_nar.xlsx"
+  # Smoke test: process first 200 narratives to validate pipeline
+
+run:
+  seed: 1024
+  max_narratives: 200  # Smoke test - process 200 narratives (~6-10 minutes)
+  save_incremental: true
+  save_csv_json: true

@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Production run for 20k cases (40k narratives: LE + CME)
+# Production run for 20,946 cases (41,892 narratives: LE + CME)
 # Date: 2025-10-27
-# Purpose: Process all 20k cases using best performing config (exp_012)
+# Purpose: Process all cases using best performing config (exp_012)
+# Data File: data-raw/all_suicide_nar.xlsx
 
 # Get the project root directory (one level up from scripts/)
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,14 +25,14 @@ log() {
 exec > >(tee -a "$LOGFILE") 2>&1
 
 log "=========================================="
-log "Production Run: 20k Cases (40k narratives)"
+log "Production Run: 20k Cases (~41,892 narratives)"
 log "Config: exp_100_production_20k_indicators_t02_high.yaml"
 log "Log file: $LOGFILE"
 log "=========================================="
 log ""
 
 # Check if production data file exists
-DATA_FILE="data-raw/production_20k_cases.xlsx"
+DATA_FILE="data-raw/all_suicide_nar.xlsx"
 if [ ! -f "$DATA_FILE" ]; then
   log "ERROR: Production data file not found: $DATA_FILE"
   log "Please ensure the 20k cases file is available before running."
@@ -48,14 +49,12 @@ log "Using production database: $DB_FILE"
 # Create production database if it doesn't exist
 if [ ! -f "$DB_FILE" ]; then
   log "Creating new production database..."
-  # Copy schema from existing database
-  if [ -f "data/experiments.db" ]; then
-    sqlite3 "$DB_FILE" < scripts/sql/create_production_schema.sql
-    log "✓ Production database created with schema"
-  else
-    log "ERROR: Source database not found for schema copying"
+  if [ ! -f "scripts/sql/create_production_schema.sql" ]; then
+    log "ERROR: Schema file not found: scripts/sql/create_production_schema.sql"
     exit 1
   fi
+  sqlite3 "$DB_FILE" < scripts/sql/create_production_schema.sql
+  log "✓ Production database created with schema"
 else
   log "Production database already exists"
   # Backup existing production DB
@@ -67,8 +66,8 @@ fi
 log ""
 
 log "Starting production experiment..."
-log "Processing 20k cases (expected ~40k narratives)"
-log "This may take several hours depending on system performance."
+log "Processing 20,946 cases (expected 41,892 narratives: LE + CME)"
+log "This may take 24-35 hours depending on system performance."
 log ""
 
 # Set production database configuration
@@ -88,9 +87,32 @@ if [ $? -eq 0 ]; then
   log "Incremental CSV/JSON exports available in: benchmark_results/"
   log ""
   log "Quick summary:"
-  log "  sqlite3 data/production_20k.db \"SELECT experiment_id, experiment_name, status, n_narratives_processed, f1_ipv, precision_ipv, recall_ipv FROM experiments WHERE experiment_name LIKE '%Production%' ORDER BY created_at DESC LIMIT 1;\""
+  sqlite3 "$DB_FILE" "
+    SELECT
+      'Experiment: ' || experiment_name as info
+    FROM experiments
+    WHERE experiment_name LIKE '%Production%'
+    ORDER BY created_at DESC LIMIT 1;
+
+    SELECT
+      'Total narratives: ' || COUNT(*) as stat
+    FROM narrative_results;
+
+    SELECT
+      'IPV detected: ' || SUM(detected) || ' (' ||
+      ROUND(SUM(detected) * 100.0 / COUNT(*), 2) || '%)' as stat
+    FROM narrative_results;
+
+    SELECT
+      'Avg confidence: ' || ROUND(AVG(confidence), 3) as stat
+    FROM narrative_results;
+
+    SELECT
+      'Avg response time: ' || ROUND(AVG(response_sec), 2) || 's' as stat
+    FROM narrative_results;
+  " | sed 's/^/  /'
   log ""
-  log "Full results:"
+  log "Detailed results by narrative type:"
   log "  Rscript scripts/view_experiment.R <experiment_id>"
 else
   log "=========================================="

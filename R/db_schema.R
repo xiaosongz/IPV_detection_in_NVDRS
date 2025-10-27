@@ -37,6 +37,7 @@ init_experiment_db <- function(db_path = NULL) {
       manual_flag_ind INTEGER,
       manual_flag INTEGER,
       data_source TEXT,
+      data_checksum TEXT,
       loaded_at TEXT NOT NULL,
       UNIQUE(incident_id, narrative_type)
     )
@@ -64,6 +65,9 @@ init_experiment_db <- function(db_path = NULL) {
       n_narratives_total INTEGER,
       n_narratives_processed INTEGER,
       n_narratives_skipped INTEGER,
+      n_narratives_completed INTEGER DEFAULT 0,
+      last_progress_update TEXT,
+      estimated_completion_time TEXT,
       start_time TEXT NOT NULL,
       end_time TEXT,
       total_runtime_sec REAL,
@@ -126,7 +130,8 @@ init_experiment_db <- function(db_path = NULL) {
       is_true_negative INTEGER,
       is_false_positive INTEGER,
       is_false_negative INTEGER,
-      FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id)
+      FOREIGN KEY (experiment_id) REFERENCES experiments(experiment_id),
+      UNIQUE(experiment_id, incident_id, narrative_type)
     )
   ")
 
@@ -139,9 +144,11 @@ init_experiment_db <- function(db_path = NULL) {
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_false_positive ON narrative_results(is_false_positive)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_false_negative ON narrative_results(is_false_negative)")
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_exp_tokens ON narrative_results(experiment_id, tokens_used)")
+  DBI::dbExecute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_exp_incident_type ON narrative_results(experiment_id, incident_id, narrative_type)")
 
   ensure_token_columns(conn)
   ensure_error_columns(conn)
+  ensure_resume_columns(conn)
 
   return(conn)
 }
@@ -219,3 +226,38 @@ ensure_error_columns <- function(conn) {
   # Ensure index exists if the column was just added
   DBI::dbExecute(conn, "CREATE INDEX IF NOT EXISTS idx_error ON narrative_results(error_occurred)")
 }
+
+#' Ensure resume columns exist on legacy databases
+#'
+#' Adds resumable run columns if missing (for pre-upgrade DBs).
+#'
+#' @param conn DBI connection
+ensure_resume_columns <- function(conn) {
+  # Check source_narratives columns
+  source_cols <- DBI::dbGetQuery(conn, "PRAGMA table_info(source_narratives)")
+  if (!"data_checksum" %in% source_cols$name) {
+    DBI::dbExecute(conn, "ALTER TABLE source_narratives ADD COLUMN data_checksum TEXT")
+  }
+  
+  # Check experiments columns
+  exp_cols <- DBI::dbGetQuery(conn, "PRAGMA table_info(experiments)")
+  
+  add_exp_col <- function(column_name, sql) {
+    if (!column_name %in% exp_cols$name) {
+      DBI::dbExecute(conn, sql)
+    }
+  }
+  
+  add_exp_col("n_narratives_completed", "ALTER TABLE experiments ADD COLUMN n_narratives_completed INTEGER DEFAULT 0")
+  add_exp_col("last_progress_update", "ALTER TABLE experiments ADD COLUMN last_progress_update TEXT")
+  add_exp_col("estimated_completion_time", "ALTER TABLE experiments ADD COLUMN estimated_completion_time TEXT")
+  
+  # Ensure unique index exists for idempotency
+  tryCatch({
+    DBI::dbExecute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_exp_incident_type ON narrative_results(experiment_id, incident_id, narrative_type)")
+  }, error = function(e) {
+    # Index might already exist or conflict - this is OK for legacy DBs
+    message("Note: Unique index on narrative_results may already exist or have conflicts: ", e$message)
+  })
+}
+
