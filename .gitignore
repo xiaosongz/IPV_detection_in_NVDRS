@@ -90,5 +90,10 @@ test_experiments.db
 *.db-shm
 *.db-wal
 
+# Production/runtime databases in data/
+data/*.db
+data/*.sqlite
+
 # Experiment logs (too large for git)
 logs/experiments/*/
+data/production_20k.db.zip

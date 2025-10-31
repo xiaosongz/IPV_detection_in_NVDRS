@@ -28,6 +28,10 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
     stop("Data file not found: ", excel_path)
   }
 
+  # Calculate checksum for data integrity
+  file_checksum <- calculate_file_checksum(excel_path)
+  cat("File checksum:", file_checksum, "\n")
+
   # Check if already loaded
   existing <- DBI::dbGetQuery(conn,
     "SELECT COUNT(*) as n FROM source_narratives WHERE data_source = ?",
@@ -36,6 +40,18 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
 
   if (existing$n > 0 && !force_reload) {
     cat("Data already loaded from:", excel_path, "(", existing$n, "narratives)\n")
+    
+    # Verify checksum
+    checksum_match <- verify_source_checksum(conn, excel_path)
+    if (is.na(checksum_match)) {
+      cat("Note: No checksum stored for existing data\n")
+    } else if (!checksum_match) {
+      warning("WARNING: File checksum has changed since data was loaded!")
+      cat("Consider using force_reload=TRUE to reload data\n")
+    } else {
+      cat("Checksum verified: data file unchanged\n")
+    }
+    
     cat("Use force_reload=TRUE to reload\n")
     return(existing$n)
   }
@@ -52,33 +68,70 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
   cat("Loading data from:", excel_path, "\n")
   data <- readxl::read_excel(excel_path)
 
-  # Ensure incident IDs are treated as character strings
-  data <- dplyr::mutate(
-    data,
-    IncidentID = dplyr::if_else(
-      is.na(IncidentID),
-      NA_character_,
-      as.character(IncidentID)
+  # Handle different file formats
+  if (all(c("IncidentID", "NarrativeCME", "NarrativeLE") %in% names(data))) {
+    # New format: all_suicide_nar.xlsx structure
+    cat("Detected new format: IncidentID, NarrativeCME, NarrativeLE\n")
+    
+    # Ensure incident IDs are treated as character strings
+    data <- dplyr::mutate(
+      data,
+      IncidentID = dplyr::if_else(
+        is.na(IncidentID),
+        NA_character_,
+        as.character(IncidentID)
+      )
     )
-  )
 
-  # Transform to long format (avoid %>% pipe issues)
-  data_long <- tidyr::pivot_longer(
-    data,
-    cols = c(NarrativeCME, NarrativeLE),
-    names_to = "Type",
-    values_to = "Narrative"
-  )
+    # Transform to long format (avoid %>% pipe issues)
+    data_long <- tidyr::pivot_longer(
+      data,
+      cols = c(NarrativeCME, NarrativeLE),
+      names_to = "Type",
+      values_to = "Narrative"
+    )
 
-  data_long <- dplyr::mutate(
-    data_long,
-    narrative_type = tolower(gsub("Narrative", "", Type)),
-    manual_flag_ind = dplyr::case_when(
-      narrative_type == "cme" ~ as.integer(as.logical(ipv_manualCME)),
-      narrative_type == "le" ~ as.integer(as.logical(ipv_manualLE))
-    ),
-    manual_flag = as.integer(as.logical(ipv_manual))
-  )
+    data_long <- dplyr::mutate(
+      data_long,
+      narrative_type = tolower(gsub("Narrative", "", Type)),
+      manual_flag_ind = NA_integer_,  # No manual flags in production data
+      manual_flag = NA_integer_       # No manual flags in production data
+    )
+    
+  } else if (all(c("IncidentID", "ipv_manualCME", "ipv_manualLE") %in% names(data))) {
+    # Legacy format: suicide_IPV_manuallyflagged.xlsx structure
+    cat("Detected legacy format with manual flags\n")
+    
+    # Ensure incident IDs are treated as character strings
+    data <- dplyr::mutate(
+      data,
+      IncidentID = dplyr::if_else(
+        is.na(IncidentID),
+        NA_character_,
+        as.character(IncidentID)
+      )
+    )
+
+    # Transform to long format (avoid %>% pipe issues)
+    data_long <- tidyr::pivot_longer(
+      data,
+      cols = c(NarrativeCME, NarrativeLE),
+      names_to = "Type",
+      values_to = "Narrative"
+    )
+
+    data_long <- dplyr::mutate(
+      data_long,
+      narrative_type = tolower(gsub("Narrative", "", Type)),
+      manual_flag_ind = dplyr::case_when(
+        narrative_type == "cme" ~ as.integer(as.logical(ipv_manualCME)),
+        narrative_type == "le" ~ as.integer(as.logical(ipv_manualLE))
+      ),
+      manual_flag = as.integer(as.logical(ipv_manual))
+    )
+  } else {
+    stop("Unrecognized file format. Expected either (IncidentID, NarrativeCME, NarrativeLE) or legacy format with manual flags.")
+  }
 
   data_long <- dplyr::select(
     data_long,
@@ -99,8 +152,17 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
     )
   )
 
+  # Remove duplicates (keep first occurrence)
+  n_before <- nrow(data_long)
+  data_long <- data_long[!duplicated(data_long[, c("incident_id", "narrative_type")]), ]
+  n_after <- nrow(data_long)
+  if (n_before > n_after) {
+    cat("Removed", n_before - n_after, "duplicate incident_id+narrative_type combinations\n")
+  }
+
   # Insert into database
   data_long$data_source <- excel_path
+  data_long$data_checksum <- file_checksum
   data_long$loaded_at <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
 
   # Convert to data frame for dbWriteTable
@@ -110,6 +172,7 @@ load_source_data <- function(conn, excel_path, force_reload = FALSE) {
 
   n_loaded <- nrow(data_long)
   cat("Loaded", n_loaded, "narratives into database\n")
+  cat("Checksum stored:", file_checksum, "\n")
 
   # Show summary
   summary <- dplyr::summarise(
@@ -196,3 +259,55 @@ check_data_loaded <- function(conn, data_source) {
   )
   return(result$n > 0)
 }
+
+#' Calculate MD5 Checksum of File
+#'
+#' @param file_path Path to file
+#' @return MD5 checksum string
+#' @keywords internal
+calculate_file_checksum <- function(file_path) {
+  if (!file.exists(file_path)) {
+    stop("File not found: ", file_path)
+  }
+  tools::md5sum(file_path)[[1]]
+}
+
+#' Verify Source Data Checksum
+#'
+#' Checks if stored checksum matches current file
+#'
+#' @param conn Database connection
+#' @param data_source Path to data file
+#' @return TRUE if match, FALSE if mismatch, NA if no checksum stored
+#' @export
+#' @examples
+#' \dontrun{
+#' conn <- get_db_connection()
+#' if (!verify_source_checksum(conn, "data/narratives.xlsx")) {
+#'   stop("Data file has been modified!")
+#' }
+#' }
+verify_source_checksum <- function(conn, data_source) {
+  # Get stored checksum
+  result <- DBI::dbGetQuery(conn,
+    "SELECT DISTINCT data_checksum FROM source_narratives WHERE data_source = ? LIMIT 1",
+    params = list(data_source)
+  )
+  
+  if (nrow(result) == 0 || is.na(result$data_checksum[1]) || result$data_checksum[1] == "") {
+    return(NA)  # No checksum stored
+  }
+  
+  stored_checksum <- result$data_checksum[1]
+  
+  # Calculate current checksum
+  if (!file.exists(data_source)) {
+    warning("Source file not found: ", data_source)
+    return(FALSE)
+  }
+  
+  current_checksum <- calculate_file_checksum(data_source)
+  
+  return(stored_checksum == current_checksum)
+}
+

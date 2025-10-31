@@ -26,7 +26,7 @@
 #' finalize_experiment(conn, experiment_id)
 #' dbDisconnect(conn)
 #' }
-run_benchmark_core <- function(config, conn, experiment_id, narratives, logger) {
+run_benchmark_core <- function(config, conn, experiment_id, narratives, logger, batch_size = 100) {
   # Update experiment with total narratives count
   DBI::dbExecute(conn,
     "UPDATE experiments SET n_narratives_total = ? WHERE experiment_id = ?",
@@ -35,6 +35,7 @@ run_benchmark_core <- function(config, conn, experiment_id, narratives, logger) 
 
   cat("\n========================================\n")
   cat("Processing", nrow(narratives), "narratives\n")
+  cat("Batch commits every", batch_size, "narratives\n")
   cat("========================================\n\n")
 
   logger$info(paste("Starting processing of", nrow(narratives), "narratives"))
@@ -85,7 +86,7 @@ run_benchmark_core <- function(config, conn, experiment_id, narratives, logger) 
     result$manual_flag <- narrative$manual_flag
     result$response_sec <- response_sec
 
-    # Log to database
+    # Log to database (handles idempotency via UNIQUE constraint)
     tryCatch(
       {
         log_narrative_result(conn, experiment_id, result)
@@ -97,31 +98,65 @@ run_benchmark_core <- function(config, conn, experiment_id, narratives, logger) 
       },
       error = function(e) {
         error_count <- error_count + 1
-        logger$error(paste("Failed to log result for narrative", narrative$incident_id), e)
-        logger$performance(narrative$incident_id, 0, "ERROR")
+        error_msg <- conditionMessage(e)
+        
+        # Check if it's a duplicate (idempotency violation)
+        if (grepl("UNIQUE constraint failed", error_msg, ignore.case = TRUE)) {
+          logger$info(paste("Skipped duplicate:", narrative$incident_id, narrative$narrative_type))
+          skipped_count <- skipped_count + 1
+        } else {
+          logger$error(paste("Failed to log result for narrative", narrative$incident_id), e)
+          logger$performance(narrative$incident_id, 0, "ERROR")
+        }
       }
     )
 
-    # Progress update
-    if (i %% 5 == 0 || i == nrow(narratives)) {
+    # Batched commit and progress update
+    if (processed_count %% batch_size == 0 || i == nrow(narratives)) {
+      # Commit transaction
+      tryCatch({
+        # SQLite auto-commits, but we can ensure consistency
+        DBI::dbExecute(conn, "PRAGMA wal_checkpoint(PASSIVE)")
+      }, error = function(e) {
+        # Ignore checkpoint errors
+      })
+      
+      # Update progress in experiments table
+      update_experiment_progress(conn, experiment_id, processed_count)
+      
+      cat(sprintf("  [%d/%d processed", processed_count, nrow(narratives)))
+      if (skipped_count > 0) {
+        cat(sprintf(", %d skipped", skipped_count))
+      }
+      if (error_count > 0) {
+        cat(sprintf(", %d errors", error_count))
+      }
+      cat("] - Progress saved\n")
+      
+      logger$info(sprintf("Progress: %d/%d processed, %d skipped, %d errors (batch commit)", 
+                          processed_count, nrow(narratives), skipped_count, error_count))
+    } else if (i %% 5 == 0) {
+      # Light progress update (no DB write)
       cat(sprintf("  [%d/%d processed", processed_count, nrow(narratives)))
       if (error_count > 0) {
         cat(sprintf(", %d errors", error_count))
       }
       cat("]\n")
-      logger$info(sprintf("Progress: %d/%d processed, %d errors", processed_count, nrow(narratives), error_count))
     }
   }
 
   cat("\n========================================\n")
   cat("✓ Processing complete!\n")
   cat("  Processed:", processed_count, "\n")
+  if (skipped_count > 0) {
+    cat("  Skipped (duplicates):", skipped_count, "\n")
+  }
   if (error_count > 0) {
     cat("  Errors:", error_count, "\n")
   }
   cat("========================================\n\n")
 
-  logger$info(paste("Processing complete:", processed_count, "narratives,", error_count, "errors"))
+  logger$info(paste("Processing complete:", processed_count, "narratives,", skipped_count, "skipped,", error_count, "errors"))
 
   # Return results from database
   get_experiment_results(conn, experiment_id)
