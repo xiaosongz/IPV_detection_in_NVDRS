@@ -122,6 +122,31 @@ if (length(args) == 0) {
 config_path <- args[1]
 cat("Configuration file:", config_path, "\n\n")
 
+# Check for resume mode
+resume_mode <- Sys.getenv("RESUME", "0") == "1"
+resume_experiment_id <- Sys.getenv("EXPERIMENT_ID", "")
+retry_errors_only <- Sys.getenv("RETRY_ERRORS_ONLY", "0") == "1"
+
+if (resume_mode) {
+  cat("========================================\n")
+  cat("RESUME MODE ENABLED\n")
+  cat("========================================\n")
+  cat("Experiment ID:", resume_experiment_id, "\n")
+  if (retry_errors_only) {
+    cat("Mode: Retry errors only\n")
+  } else {
+    cat("Mode: Process missing narratives\n")
+  }
+  cat("\n")
+  
+  if (resume_experiment_id == "") {
+    cat("ERROR: RESUME=1 requires EXPERIMENT_ID to be set\n\n")
+    cat("Usage:\n")
+    cat("  RESUME=1 EXPERIMENT_ID=<uuid> Rscript scripts/run_experiment.R <config.yaml>\n\n")
+    quit(save = "no", status = 1)
+  }
+}
+
 # Load and validate configuration
 cat("Step 1: Loading configuration...\n")
 tryCatch({
@@ -153,7 +178,7 @@ if (!file.exists(db_path)) {
 }
 cat("✓ Connected to database:", db_path, "\n\n")
 
-# Load source data if needed
+# Load source data if needed (or verify checksum on resume)
 cat("Step 3: Loading source data...\n")
 data_source <- config$data$file
 
@@ -165,48 +190,201 @@ if (!check_data_loaded(conn, data_source)) {
   n_existing <- DBI::dbGetQuery(conn,
     "SELECT COUNT(*) as n FROM source_narratives WHERE data_source = ?",
     params = list(data_source))$n
-  cat("✓ Source data already loaded (", n_existing, "narratives)\n\n")
+  cat("✓ Source data already loaded (", n_existing, "narratives)\n")
+  
+  # Verify checksum if resuming
+  if (resume_mode) {
+    cat("  Verifying data file checksum...\n")
+    checksum_ok <- verify_source_checksum(conn, data_source)
+    if (is.na(checksum_ok)) {
+      warning("No checksum stored for source data - cannot verify integrity")
+    } else if (!checksum_ok) {
+      cat("✗ ERROR: Data file checksum mismatch!\n")
+      cat("  The source file has changed since the experiment started.\n")
+      cat("  Cannot safely resume with modified data.\n\n")
+      DBI::dbDisconnect(conn)
+      quit(save = "no", status = 1)
+    } else {
+      cat("  ✓ Checksum verified: data file unchanged\n")
+    }
+  }
+  cat("\n")
 }
 
-# Get narratives for this experiment
-cat("Step 4: Retrieving narratives...\n")
-narratives <- get_source_narratives(
-  conn,
-  data_source = data_source,
-  max_narratives = config$run$max_narratives
-)
-cat("✓ Retrieved", nrow(narratives), "narratives\n")
-cat("  CME:", sum(narratives$narrative_type == "cme"), "\n")
-cat("  LE:", sum(narratives$narrative_type == "le"), "\n")
-cat("  Positive labels:", sum(narratives$manual_flag_ind, na.rm = TRUE), "\n\n")
+# RESUME PATH: Load existing experiment or create new one
+if (resume_mode) {
+  cat("Step 4: Loading existing experiment for resume...\n")
+  
+  # Validate experiment exists and can be resumed
+  exp_info <- DBI::dbGetQuery(conn,
+    "SELECT experiment_id, experiment_name, status, data_file, 
+            n_narratives_total, n_narratives_completed, model_name, temperature,
+            system_prompt, user_template
+     FROM experiments 
+     WHERE experiment_id = ?",
+    params = list(resume_experiment_id)
+  )
+  
+  if (nrow(exp_info) == 0) {
+    cat("✗ ERROR: Experiment not found:", resume_experiment_id, "\n\n")
+    DBI::dbDisconnect(conn)
+    quit(save = "no", status = 1)
+  }
+  
+  # Check status
+  if (exp_info$status == "completed") {
+    cat("✗ ERROR: Cannot resume completed experiment\n")
+    cat("  Experiment", resume_experiment_id, "has status: completed\n\n")
+    DBI::dbDisconnect(conn)
+    quit(save = "no", status = 1)
+  }
+  
+  cat("✓ Found experiment:", exp_info$experiment_name, "\n")
+  cat("  Status:", exp_info$status, "\n")
+  cat("  Model:", exp_info$model_name, "(T=", exp_info$temperature, ")\n")
+  
+  if (!is.na(exp_info$n_narratives_completed) && exp_info$n_narratives_completed > 0) {
+    pct_complete <- (exp_info$n_narratives_completed / exp_info$n_narratives_total) * 100
+    cat("  Progress:", exp_info$n_narratives_completed, "/", exp_info$n_narratives_total,
+        sprintf("(%.1f%%)", pct_complete), "\n")
+  }
+  cat("\n")
+  
+  # Warn if YAML config differs from DB (DB is authoritative)
+  if (config$model$name != exp_info$model_name) {
+    warning("YAML model (", config$model$name, ") differs from experiment model (", 
+            exp_info$model_name, "). Using DB config.")
+  }
+  if (config$model$temperature != exp_info$temperature) {
+    warning("YAML temperature (", config$model$temperature, ") differs from experiment (", 
+            exp_info$temperature, "). Using DB config.")
+  }
+  
+  # Acquire resume lock
+  cat("Step 5: Acquiring resume lock...\n")
+  acquire_resume_lock(resume_experiment_id)
+  cat("✓ Lock acquired\n\n")
+  
+  # Use existing experiment ID
+  experiment_id <- resume_experiment_id
+  
+  # Determine remaining work
+  cat("Step 6: Building remaining work set...\n")
+  
+  if (retry_errors_only) {
+    # Get narratives that errored
+    remaining_query <- "
+      SELECT sn.* 
+      FROM source_narratives sn
+      INNER JOIN narrative_results nr ON 
+        sn.incident_id = nr.incident_id AND 
+        sn.narrative_type = nr.narrative_type
+      WHERE nr.experiment_id = ? 
+        AND nr.error_occurred = 1
+        AND sn.data_source = ?
+    "
+    narratives <- DBI::dbGetQuery(conn, remaining_query, 
+                                   params = list(experiment_id, data_source))
+    cat("✓ Found", nrow(narratives), "narratives with errors to retry\n\n")
+    
+  } else {
+    # Get all narratives not yet processed
+    remaining_query <- "
+      SELECT sn.* 
+      FROM source_narratives sn
+      LEFT JOIN narrative_results nr ON 
+        sn.incident_id = nr.incident_id AND 
+        sn.narrative_type = nr.narrative_type AND
+        nr.experiment_id = ?
+      WHERE sn.data_source = ?
+        AND nr.result_id IS NULL
+    "
+    narratives <- DBI::dbGetQuery(conn, remaining_query, 
+                                   params = list(experiment_id, data_source))
+    cat("✓ Found", nrow(narratives), "narratives not yet processed\n\n")
+  }
+  
+  # Check if already complete
+  if (nrow(narratives) == 0) {
+    cat("========================================\n")
+    cat("No remaining work!\n")
+    cat("========================================\n\n")
+    cat("All narratives have been processed for this experiment.\n")
+    cat("Use RETRY_ERRORS_ONLY=1 if you want to reprocess errors.\n\n")
+    
+    release_resume_lock(experiment_id)
+    DBI::dbDisconnect(conn)
+    quit(save = "no", status = 0)
+  }
+  
+  # Convert to tibble
+  narratives <- tibble::as_tibble(narratives)
+  
+  # Initialize logger (use existing log directory)
+  cat("Step 7: Initializing logger...\n")
+  logger <- init_experiment_logger(experiment_id)
+  cat("✓ Logger initialized\n")
+  cat("  Log directory:", logger$log_dir, "\n\n")
+  
+  logger$info("========================================")
+  logger$info("RESUME MODE")
+  logger$info(paste("Experiment:", exp_info$experiment_name))
+  logger$info(paste("Remaining narratives:", nrow(narratives)))
+  if (retry_errors_only) {
+    logger$info("Mode: Retry errors only")
+  }
+  logger$info("========================================")
+  
+} else {
+  # NEW EXPERIMENT PATH
+  # Get narratives for this experiment
+  cat("Step 4: Retrieving narratives...\n")
+  narratives <- get_source_narratives(
+    conn,
+    data_source = data_source,
+    max_narratives = config$run$max_narratives
+  )
+  cat("✓ Retrieved", nrow(narratives), "narratives\n")
+  cat("  CME:", sum(narratives$narrative_type == "cme"), "\n")
+  cat("  LE:", sum(narratives$narrative_type == "le"), "\n")
+  cat("  Positive labels:", sum(narratives$manual_flag_ind, na.rm = TRUE), "\n\n")
+  
+  # Start experiment
+  cat("Step 5: Creating experiment record...\n")
+  experiment_id <- start_experiment(conn, config)
+  cat("✓ Experiment created\n")
+  cat("  Experiment ID:", experiment_id, "\n\n")
+  
+  # Initialize logger
+  cat("Step 6: Initializing logger...\n")
+  logger <- init_experiment_logger(experiment_id)
+  cat("✓ Logger initialized\n")
+  cat("  Log directory:", logger$log_dir, "\n\n")
+  
+  logger$info("========================================")
+  logger$info(paste("Experiment:", config$experiment$name))
+  logger$info(paste("Model:", config$model$name))
+  logger$info(paste("Temperature:", config$model$temperature))
+  logger$info(paste("Narratives:", nrow(narratives)))
+  logger$info("========================================")
+}
 
-# Start experiment
-cat("Step 5: Creating experiment record...\n")
-experiment_id <- start_experiment(conn, config)
-cat("✓ Experiment created\n")
-cat("  Experiment ID:", experiment_id, "\n\n")
-
-# Initialize logger
-cat("Step 6: Initializing logger...\n")
-logger <- init_experiment_logger(experiment_id)
-cat("✓ Logger initialized\n")
-cat("  Log directory:", logger$log_dir, "\n\n")
-
-logger$info("========================================")
-logger$info(paste("Experiment:", config$experiment$name))
-logger$info(paste("Model:", config$model$name))
-logger$info(paste("Temperature:", config$model$temperature))
-logger$info(paste("Narratives:", nrow(narratives)))
-logger$info("========================================")
+# Common processing path for both new and resumed experiments
 
 # Run benchmark
-cat("Step 7: Running benchmark...\n")
-cat("  This may take several minutes depending on number of narratives...\n\n")
+step_num <- if (resume_mode) 8 else 7
+cat("Step", step_num, ": Running benchmark...\n")
+if (resume_mode) {
+  cat("  Resuming from", nrow(narratives), "remaining narratives...\n\n")
+} else {
+  cat("  This may take several minutes depending on number of narratives...\n\n")
+}
 
 tryCatch({
   results <- run_benchmark_core(config, conn, experiment_id, narratives, logger)
 
-  cat("\nStep 8: Computing metrics...\n")
+  step_num <- step_num + 1
+  cat("\nStep", step_num, ": Computing metrics...\n")
   # Metrics are computed by finalize_experiment from database
 
   # Optionally save CSV/JSON files
@@ -241,12 +419,22 @@ tryCatch({
   # Finalize experiment
   finalize_experiment(conn, experiment_id, csv_file, json_file)
 
-  cat("Step 9: Experiment finalized\n\n")
+  step_num <- step_num + 1
+  cat("Step", step_num, ": Experiment finalized\n\n")
   logger$info("Experiment finalized successfully")
+  
+  # Release resume lock if in resume mode
+  if (resume_mode) {
+    release_resume_lock(experiment_id)
+  }
 
   # Display results
   cat("================================================================================\n")
-  cat("                        Experiment Complete!\n")
+  if (resume_mode) {
+    cat("                        Resume Complete!\n")
+  } else {
+    cat("                        Experiment Complete!\n")
+  }
   cat("================================================================================\n\n")
 
   exp_info <- DBI::dbGetQuery(conn,
@@ -309,6 +497,11 @@ tryCatch({
 
   cat("Experiment marked as failed in database\n")
   cat("Check error log:", file.path(logger$log_dir, "errors.log"), "\n\n")
+  
+  # Release resume lock if in resume mode
+  if (resume_mode) {
+    release_resume_lock(experiment_id)
+  }
 
   DBI::dbDisconnect(conn)
   quit(save = "no", status = 1)

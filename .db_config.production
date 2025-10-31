@@ -1,0 +1,5 @@
+# Production Database Configuration
+# Use this configuration for the 20k production run
+
+EXPERIMENTS_DB=data/production_20k.db
+TEST_DB=tests/fixtures/test_experiments.db

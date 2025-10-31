@@ -637,3 +637,117 @@ save_experiment_results <- function(experiment_id,
   
   return(invisible(output_files))
 }
+
+#' Acquire Resume Lock for Experiment
+#'
+#' Creates a PID lock file to prevent concurrent resumes
+#'
+#' @param experiment_id Experiment ID
+#' @return TRUE if lock acquired, stops with error if lock exists
+#' @export
+acquire_resume_lock <- function(experiment_id) {
+  lock_file <- here::here("data", paste0(".resume_lock_", experiment_id, ".pid"))
+  
+  # Check if lock exists
+  if (file.exists(lock_file)) {
+    # Read PID from lock file
+    locked_pid <- readLines(lock_file, warn = FALSE)[1]
+    
+    # Check if process is still running (Unix-like systems)
+    if (.Platform$OS.type == "unix") {
+      pid_running <- system2("ps", args = c("-p", locked_pid), stdout = FALSE, stderr = FALSE) == 0
+      
+      if (pid_running) {
+        stop("Resume lock exists for experiment ", experiment_id, 
+             " (PID: ", locked_pid, "). Another process may be resuming this experiment.\n",
+             "If the process crashed, verify PID is not active and remove: ", lock_file,
+             call. = FALSE)
+      } else {
+        cat("Stale lock file found (PID", locked_pid, "not running). Removing...\n")
+        file.remove(lock_file)
+      }
+    } else {
+      # Windows: just warn
+      warning("Lock file exists: ", lock_file, 
+              "\nIf no other process is running, remove this file manually.",
+              call. = FALSE)
+      stop("Cannot acquire resume lock", call. = FALSE)
+    }
+  }
+  
+  # Create lock file with current PID
+  current_pid <- Sys.getpid()
+  cat(current_pid, file = lock_file)
+  cat("Resume lock acquired (PID:", current_pid, ")\n")
+  
+  return(TRUE)
+}
+
+#' Release Resume Lock for Experiment
+#'
+#' Removes PID lock file
+#'
+#' @param experiment_id Experiment ID
+#' @export
+release_resume_lock <- function(experiment_id) {
+  lock_file <- here::here("data", paste0(".resume_lock_", experiment_id, ".pid"))
+  
+  if (file.exists(lock_file)) {
+    file.remove(lock_file)
+    cat("Resume lock released\n")
+  }
+  
+  invisible(TRUE)
+}
+
+#' Update Progress for Running Experiment
+#'
+#' Updates n_narratives_completed and estimated completion time
+#'
+#' @param conn Database connection
+#' @param experiment_id Experiment ID
+#' @param n_completed Number of narratives completed so far
+#' @export
+update_experiment_progress <- function(conn, experiment_id, n_completed) {
+  # Get start time and total narratives
+  exp_info <- DBI::dbGetQuery(conn,
+    "SELECT start_time, n_narratives_total FROM experiments WHERE experiment_id = ?",
+    params = list(experiment_id)
+  )
+  
+  if (nrow(exp_info) == 0) {
+    warning("Experiment not found: ", experiment_id)
+    return(invisible(FALSE))
+  }
+  
+  # Calculate ETA
+  start_time <- as.POSIXct(exp_info$start_time, format = "%Y-%m-%d %H:%M:%S")
+  elapsed_sec <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+  
+  eta_text <- "Unknown"
+  if (n_completed > 0 && !is.na(exp_info$n_narratives_total) && exp_info$n_narratives_total > 0) {
+    avg_sec_per_narrative <- elapsed_sec / n_completed
+    remaining <- exp_info$n_narratives_total - n_completed
+    eta_sec <- remaining * avg_sec_per_narrative
+    eta_time <- Sys.time() + eta_sec
+    eta_text <- format(eta_time, "%Y-%m-%d %H:%M:%S")
+  }
+  
+  # Update database
+  DBI::dbExecute(conn,
+    "UPDATE experiments SET 
+      n_narratives_completed = ?,
+      last_progress_update = ?,
+      estimated_completion_time = ?
+    WHERE experiment_id = ?",
+    params = list(
+      n_completed,
+      format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+      eta_text,
+      experiment_id
+    )
+  )
+  
+  invisible(TRUE)
+}
+
