@@ -96,3 +96,4 @@ data/*.sqlite
 
 # Experiment logs (too large for git)
 logs/experiments/*/
+data/production_20k.db.zip
