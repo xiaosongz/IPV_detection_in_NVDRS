@@ -25,7 +25,10 @@ cp .env.example .env
 # 4. Run demonstration (5 minutes, no API keys required)
 Rscript scripts/demo_workflow.R
 
-# 5. View results
+# 5. Production smoke test (6-10 minutes, validates pipeline)
+bash scripts/run_smoke_test.sh
+
+# 6. View results
 Rscript scripts/view_experiment.R <experiment_id_from_demo>
 ```
 
@@ -43,6 +46,41 @@ YAML-driven workflows that orchestrate modular functions using configurable para
 YAML Config → Script → Modular Functions → Results → Database
 ```
 
+## 🏭 Production Infrastructure
+
+The repository includes production-scale processing capabilities for handling 20K+ suicide narratives with robust error handling and progress tracking.
+
+### Production Features
+- **Resumable Experiments**: Pause and resume large-scale runs without losing progress
+- **Progress Monitoring**: Real-time ETA calculations and batch processing updates
+- **Data Integrity**: MD5 checksums, deduplication, and idempotent processing
+- **Error Recovery**: Automatic retry mechanisms and graceful degradation
+- **Database Mirroring**: SQLite to PostgreSQL synchronization for analytics
+
+### Production Workflow
+```bash
+# 1. Production smoke test (6-10 minutes)
+bash scripts/run_smoke_test.sh
+
+# 2. Full production run (24-35 hours for 20K narratives)
+bash scripts/run_production_20k.sh
+
+# 3. Resume interrupted runs
+bash scripts/resume_experiment.sh --db data/production_20k.db
+
+# 4. Monitor production progress
+Rscript scripts/exploratory/check_production_progress.R
+
+# 5. Data quality analysis
+Rscript scripts/exploratory/detailed_data_quality_analysis.R
+```
+
+### Production Database
+- **Enhanced Schema**: Progress tracking, ETA calculations, PID locks
+- **Batch Processing**: Configurable batch sizes for memory efficiency
+- **Checkpoint System**: Automatic state persistence for resumability
+- **Production Configuration**: Separate from test database for safety
+
 ## 📁 Repository Structure
 
 ```
@@ -51,20 +89,39 @@ IPV_detection_in_NVDRS/
 │   ├── call_llm.R             # LLM API interface
 │   ├── config_loader.R        # YAML configuration loading
 │   ├── experiment_logger.R    # Result logging and tracking
-│   └── [8 more active files]
+│   ├── run_benchmark_core.R   # Enhanced with resumable runs
+│   └── [10+ more active files]
+├── R/legacy/                   # Archived code (737+ lines)
 ├── scripts/                    # Entry points and orchestration
 │   ├── run_experiment.R       # Main experiment runner
 │   ├── demo_workflow.R        # Quick demo for reviewers
-│   └── view_experiment.R      # Results viewer
+│   ├── view_experiment.R      # Results viewer
+│   ├── run_production_20k.sh  # Production 20k case processing
+│   ├── resume_experiment.sh   # Resumable experiment management
+│   ├── run_smoke_test.sh      # Quick validation testing
+│   ├── sync_sqlite_to_postgres.sh # Database mirroring
+│   ├── exploratory/           # Data quality analysis tools
+│   └── sql/                   # Database schema scripts
 ├── configs/                    # Configuration files
-│   ├── experiments/           # 51 YAML experiment definitions
+│   ├── experiments/           # 52+ YAML experiment definitions
+│   │   └── archive/           # Archived test configurations
 │   └── prompts/               # Reusable prompt templates
 ├── data/                       # Data storage
 │   ├── synthetic_narratives.csv # 30 example narratives for testing
-│   └── experiments.db         # SQLite database (created automatically)
-├── tests/                      # Test suite (207 tests)
-├── analysis/                   # Reproducible analysis notebooks
+│   ├── production_20k.db      # Production database (git-ignored)
+│   └── experiments.db         # Test database (created automatically)
+├── tests/                      # Comprehensive test suite
+│   ├── testthat/              # Unit tests (200+ tests)
+│   ├── integration/           # Integration tests
+│   └── fixtures/              # Test data and databases
 ├── docs/                       # Documentation (YYYYMMDD- prefix)
+│   ├── analysis/              # Analysis reports and notebooks
+│   ├── communication/         # External communications
+│   ├── figures/               # Generated figures
+│   ├── tables/                # Generated tables
+│   └── archive/               # Archived documentation
+├── results/                    # Result exports
+│   └── sample_responses/       # Sample LLM responses
 └── .env.example                # Environment variable template
 ```
 
@@ -123,8 +180,17 @@ cp .env.example .env
 # Demo with synthetic data (5 minutes)
 Rscript scripts/demo_workflow.R
 
+# Production smoke test (validation)
+bash scripts/run_smoke_test.sh
+
 # Full experiment with real data
 Rscript scripts/run_experiment.R configs/experiments/exp_037_baseline_v4_t00_medium.yaml
+
+# Production 20k case processing
+bash scripts/run_production_20k.sh
+
+# Resumable experiments (pause/resume capability)
+bash scripts/resume_experiment.sh --db data/production_20k.db
 
 # Batch experiments
 bash scripts/run_experiments_037_051.sh
@@ -135,14 +201,26 @@ bash scripts/run_experiments_037_051.sh
 # View experiment summary
 Rscript scripts/view_experiment.R <experiment_id>
 
-# Generate analysis notebooks
-Rscript -e "rmarkdown::render('analysis/20251005-experiment_comparison.Rmd')"
+# Generate production analysis report
+Rscript -e "rmarkdown::render('docs/analysis/20251030-production_report.Rmd')"
+
+# Production progress monitoring
+Rscript scripts/exploratory/check_production_progress.R
+
+# Data quality analysis
+Rscript scripts/exploratory/detailed_data_quality_analysis.R
+
+# Historical analysis notebooks
+Rscript -e "rmarkdown::render('docs/analysis/20251004-experiment_quality_report.Rmd')"
 ```
 
 ### 4. Testing
 ```bash
-# Run full test suite (207 tests)
+# Run full test suite (200+ tests)
 Rscript -e "testthat::test_dir('tests/testthat')"
+
+# Resumable run tests
+Rscript tests/test_resumable_runs.R
 
 # Integration tests only
 Rscript tests/integration/run_integration_tests.R
@@ -179,6 +257,35 @@ run:
   seed: 1024
   max_narratives: 1000000
   save_incremental: true
+  batch_size: 50              # Production batch processing
+  resume_enabled: true        # Enable resumable runs
+  progress_tracking: true     # Enable ETA calculations
+```
+
+### Production Example
+```yaml
+experiment:
+  name: "Production 20k Case Processing"
+  author: "production_system"
+  notes: "Full-scale IPV detection with resumable processing"
+
+model:
+  name: "mlx-community/gpt-oss-120b"
+  provider: "local"
+  api_url: "http://localhost:8080/v1/chat/completions"
+  temperature: 0.2
+
+data:
+  file: "data/production_narratives.csv"
+
+run:
+  seed: 1024
+  max_narratives: 20000
+  batch_size: 100
+  save_incremental: true
+  resume_enabled: true
+  progress_tracking: true
+  database: "data/production_20k.db"
 ```
 
 ## 📈 Core Functions
@@ -213,37 +320,60 @@ results <- get_experiment_results(conn, experiment_id)
 
 ## 📋 Available Experiments
 
-The repository includes **51 experiment configurations** testing:
+The repository includes **52+ experiment configurations** testing:
 
 - **Prompt versions**: Baseline, indicators, strict, context, chain-of-thought
 - **Temperature settings**: 0.0, 0.2, 0.8 (low, medium, high variability)
-- **Models**: GPT-4o-mini, local MLX models
+- **Models**: GPT-4o-mini, local MLX models (mlx-community/gpt-oss-120b)
 - **Reasoning levels**: Low, medium, high
+- **Production configurations**: `exp_100_production_20k_indicators_t02_high.yaml`
+
+### Key Experiment Types
+- **exp_001-051**: Comparative analysis across models and prompts
+- **exp_100-101**: Production-scale configurations and smoke tests
+- **archived configurations**: Historical experiments in `configs/experiments/archive/`
 
 See `configs/experiments/README.md` for complete list.
 
 ## 🧪 Testing and Validation
 
 ### Test Coverage
-- **207 unit tests** covering all active functions
+- **200+ unit tests** covering all active functions
 - **Integration tests** for complete workflows
 - **Performance tests** for large-scale processing
+- **Resumable run tests** for production infrastructure
 - **Error condition testing** for edge cases
+
+### Enhanced Database Features
+- **Production Schema**: Progress tracking, ETA calculations, PID locks
+- **Data Integrity**: MD5 checksums, deduplication, idempotent processing
+- **Batch Processing**: Configurable batch sizes for memory efficiency
+- **Checkpoint System**: Automatic state persistence for resumability
+- **PostgreSQL Mirroring**: Advanced analytics and dashboard support
 
 ### Validation Approach
 - **Gold-standard comparison** against manually labeled NVDRS data
 - **Cross-validation** across multiple prompt versions and models
 - **Error analysis** of false positives/negatives
 - **Computational efficiency** measurements
+- **Production validation** through smoke testing and resumable runs
 
 ## 📊 Analysis and Results
 
 ### Reproducible Analysis Notebooks
 All analysis notebooks use `YYYYMMDD-` prefix and are fully reproducible:
 
+- `20251030-production_report.Rmd` - Complete 35K narrative production analysis
+- `20251004-experiment_quality_report.Rmd` - Quality metrics and performance analysis
 - `20251005-experiment_comparison.Rmd` - Model/prompt performance comparison
 - `20251005-reproduce_paper_figures.Rmd` - Generate all paper figures/tables
 - `20251005-validation_metrics.Rmd` - Accuracy metrics computation
+
+### Production Analysis
+- **Interactive Code Folding**: All code chunks collapsed by default with click-to-expand
+- **Comprehensive Metrics**: Detection patterns, agreement analysis, confidence analysis
+- **Data Quality Assessment**: Placeholder detection, narrative completeness analysis
+- **Operational Performance**: Processing time, token usage, error rates
 
 ### Key Metrics
 - **Precision**: True positives / (True positives + False positives)
@@ -299,20 +429,31 @@ This repository is designed as **research compendium** for publication. For ques
 
 ### For Reviewers
 - **Demo**: Run `Rscript scripts/demo_workflow.R` (5 minutes, no API keys required)
+- **Production Validation**: Run `bash scripts/run_smoke_test.sh` (6-10 minutes)
 - **Documentation**: See `docs/` directory with `YYYYMMDD-` prefix
-- **Testing**: 207 tests available via `Rscript -e "testthat::test_dir('tests/testthat')"`
+- **Testing**: 200+ tests available via `Rscript -e "testthat::test_dir('tests/testthat')"`
 
-### For Researchers  
+### For Researchers
 - **Configuration**: See `configs/experiments/` for available experiments
-- **Analysis**: See `analysis/` directory for reproducible notebooks
-- **Extension**: See `docs/20251005-code_inventory.md` for function documentation
+- **Production**: Use production scripts for large-scale processing
+- **Analysis**: See `docs/analysis/` directory for reproducible notebooks
+- **Implementation**: See `docs/FINAL_PRODUCTION_IMPLEMENTATION_AND_PROGRESS.md`
 
 ## 📚 Documentation Structure
 
 All documentation files use `YYYYMMDD-` prefix for versioning:
 
+### Production Documentation
+- `FINAL_PRODUCTION_IMPLEMENTATION_AND_PROGRESS.md` - Production infrastructure status
+- `PRODUCTION_20K_STATUS.md` - 20K case processing implementation status
+
+### Analysis and Results
+- `analysis/20251030-production_report.Rmd` - Complete production analysis with code folding
+- `analysis/20251004-experiment_quality_report.Rmd` - Quality metrics and validation
+
+### Historical Documentation (archived)
 - `20251005-publication_task_list.md` - Complete publication readiness checklist
-- `20251005-code_inventory.md` - Function categorization and dependencies  
+- `20251005-code_inventory.md` - Function categorization and dependencies
 - `20251005-compendium_structure.md` - Repository architecture explanation
 - `20251005-database_schema.md` - Database structure documentation
 
@@ -328,6 +469,6 @@ This repository represents a **snapshot** of research for publication. Future ve
 
 ---
 
-**Last Updated**: October 5, 2025  
-**Version**: 0.1.0 (Pre-publication)  
-**Status**: Publication Ready - Peer Review Welcome
+**Last Updated**: October 30, 2025
+**Version**: 1.0.0 (Production Ready)
+**Status**: Production Infrastructure Complete - Peer Review Welcome
