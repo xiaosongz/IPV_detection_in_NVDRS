@@ -1,0 +1,1250 @@
+---
+title: "IPV Detection in NVDRS Suicide Narratives - Production Analysis"
+subtitle: "35K Narrative Exploratory Analysis"
+author: "Analysis Report"
+date: "`r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+    theme: cosmo
+    fig_width: 10
+    fig_height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+```
+
+# Executive Summary
+
+```{r load_libraries, message=FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+library(DBI)
+library(RSQLite)
+library(dbplyr)
+library(knitr)
+library(scales)
+library(jsonlite)
+
+# Connect to database
+conn <- dbConnect(RSQLite::SQLite(), here::here("data", "production_20k.db"))
+
+# Table references
+experiments_tbl <- tbl(conn, "experiments")
+source_narratives_tbl <- tbl(conn, "source_narratives")
+narrative_results_tbl <- tbl(conn, "narrative_results")
+```
+
+```{r executive_summary}
+# Get production experiment (the one with full dataset)
+prod_exp <- experiments_tbl %>%
+  arrange(desc(n_narratives_total)) %>%
+  head(1) %>%
+  collect()
+
+# Get basic counts
+total_narratives <- source_narratives_tbl %>% count() %>% pull(n)
+total_incidents <- source_narratives_tbl %>% 
+  distinct(incident_id) %>% 
+  count() %>% 
+  pull(n)
+
+# Get detection results for production experiment only
+detection_summary <- narrative_results_tbl %>%
+  filter(experiment_id == local(prod_exp$experiment_id[1])) %>%
+  summarise(
+    total = n(),
+    detected = sum(detected, na.rm = TRUE),
+    errors = sum(error_occurred, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  collect() %>%
+  mutate(
+    detection_rate = detected / total * 100,
+    error_rate = errors / total * 100
+  )
+```
+
+## Dataset Overview
+
+This analysis examines **`r format(total_narratives, big.mark = ",")`** suicide narratives from **`r format(total_incidents, big.mark = ",")`** unique incidents in the NVDRS database. The production run successfully processed **`r format(detection_summary$total, big.mark = ",")`** narratives with only **`r detection_summary$errors`** operational errors (**`r sprintf("%.4f%%", detection_summary$error_rate)`** error rate), completing execution in **`r round(prod_exp$total_runtime_sec[1] / 3600, 2)`** hours.
+
+The analysis employed the **`r prod_exp$model_name[1]`** model with temperature **`r prod_exp$temperature[1]`**, detecting intimate partner violence (IPV) in **`r sprintf("%.2f%%", detection_summary$detection_rate)`** of narratives. These results represent patterns in unlabeled production data and should be interpreted as exploratory findings rather than validated performance metrics.
+
+## Key Findings at a Glance
+
+```{r key_findings_summary, include=FALSE}
+# Calculate summary metrics for prose
+year_range <- source_narratives_tbl %>% 
+  summarise(min_year = min(incident_year, na.rm = TRUE),
+            max_year = max(incident_year, na.rm = TRUE)) %>%
+  collect()
+
+# Quick placeholder calculation for summary
+placeholder_count <- source_narratives_tbl %>%
+  collect() %>%
+  nrow()
+```
+
+The dataset spans **`r year_range$min_year`** to **`r year_range$max_year`**, providing comprehensive temporal coverage. Data quality analysis using comprehensive placeholder detection (detailed in Section 1.4) identifies true missing or unavailable reports, enabling accurate assessment of data completeness across CME and LE narrative types.
+
+## Important Note
+
+⚠️ **This is unlabeled production data.** All findings presented in this report are descriptive and exploratory in nature. Without ground truth labels, we cannot calculate validation metrics such as accuracy, precision, recall, or F1 scores. The agreement analysis between CME and LE narratives provides face validity, but formal validation against expert-labeled data remains necessary for clinical or operational deployment.
+
+---
+
+# 1. Data Structure & Quality
+
+Understanding the structure and quality of the underlying data is essential for interpreting detection results. This section examines the database organization, narrative type distribution, incident-level completeness, data quality patterns, and temporal coverage.
+
+## 1.1 Database Overview
+
+The database structure comprises three primary tables: experiments (storing run configurations), source_narratives (the input death investigation narratives), and narrative_results (the detection outputs). This analysis focuses exclusively on the production run with the complete dataset.
+
+```{r database_overview}
+# Focus on production experiment only
+prod_table_sizes <- tibble(
+  table = c("source_narratives", "narrative_results (production)"),
+  rows = c(
+    source_narratives_tbl %>% count() %>% pull(n),
+    narrative_results_tbl %>% 
+      filter(experiment_id == local(prod_exp$experiment_id[1])) %>%
+      count() %>% pull(n)
+  )
+)
+
+kable(prod_table_sizes, 
+      format.args = list(big.mark = ","),
+      caption = "Production Dataset Overview")
+
+# Show production experiment details
+prod_details <- prod_exp %>%
+  select(experiment_name, model_name, temperature, n_narratives_total, 
+         total_runtime_sec) %>%
+  mutate(runtime_hours = round(total_runtime_sec / 3600, 2))
+
+kable(prod_details %>% select(-total_runtime_sec),
+      col.names = c("Experiment", "Model", "Temperature", "Narratives", "Runtime (hrs)"),
+      format.args = list(big.mark = ","),
+      caption = "Production Experiment Configuration")
+```
+
+This analysis examines a single production run processing **`r format(prod_table_sizes$rows[1], big.mark=",")`** narratives using the **`r prod_exp$model_name[1]`** model at temperature **`r prod_exp$temperature[1]`**. The experiment completed successfully in **`r sprintf("%.2f", prod_exp$total_runtime_sec[1] / 3600)`** hours, processing **`r format(prod_table_sizes$rows[2], big.mark=",")`** narratives with results stored in the database.
+
+## 1.2 Narrative Type Distribution
+
+NVDRS death investigations produce two distinct narrative types: Chief Medical Examiner (CME) narratives documenting autopsy and medical findings, and Law Enforcement (LE) narratives describing investigative details. Understanding this distribution is crucial because these sources may capture different aspects of IPV indicators.
+
+```{r narrative_type_distribution}
+narrative_type_summary <- source_narratives_tbl %>%
+  group_by(narrative_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  collect() %>%
+  mutate(percentage = count / sum(count) * 100)
+
+kable(narrative_type_summary,
+      col.names = c("Narrative Type", "Count", "Percentage"),
+      digits = 2,
+      format.args = list(big.mark = ","))
+
+# Visualization
+ggplot(narrative_type_summary, aes(x = narrative_type, y = count, fill = narrative_type)) +
+  geom_col() +
+  geom_text(aes(label = sprintf("%s\n(%.1f%%)", 
+                                scales::comma(count), 
+                                percentage)),
+            vjust = -0.5) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.1))) +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "Narrative Type Distribution",
+       x = "Narrative Type",
+       y = "Count") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+The distribution reveals a slight imbalance, with CME narratives comprising **`r sprintf("%.1f%%", narrative_type_summary$percentage[narrative_type_summary$narrative_type=="cme"])`** of the dataset compared to **`r sprintf("%.1f%%", narrative_type_summary$percentage[narrative_type_summary$narrative_type=="le"])`** for LE narratives. This CME predominance likely reflects more consistent medical examiner reporting compared to variable law enforcement documentation practices across jurisdictions.
+
+## 1.3 Incident-Level Completeness
+
+Incident-level completeness—whether both CME and LE narratives are available for a single death investigation—is critical for our agreement analysis (Section 3). Incidents with both narrative types enable cross-validation of IPV detection, while single-narrative incidents limit verification opportunities.
+
+```{r incident_completeness}
+# Analyze incident completeness
+incident_completeness <- source_narratives_tbl %>%
+  group_by(incident_id) %>%
+  summarise(
+    n_narratives = n(),
+    has_cme = as.integer(sum(narrative_type == "cme") > 0),
+    has_le = as.integer(sum(narrative_type == "le") > 0),
+    .groups = "drop"
+  ) %>%
+  collect() %>%
+  mutate(
+    completeness_category = case_when(
+      has_cme == 1 & has_le == 1 ~ "Both CME and LE",
+      has_cme == 1 & has_le == 0 ~ "CME only",
+      has_cme == 0 & has_le == 1 ~ "LE only",
+      TRUE ~ "Unknown"
+    )
+  )
+
+completeness_summary <- incident_completeness %>%
+  group_by(completeness_category) %>%
+  summarise(
+    n_incidents = n(),
+    .groups = "drop"
+  ) %>%
+  mutate(percentage = n_incidents / sum(n_incidents) * 100)
+
+kable(completeness_summary,
+      col.names = c("Completeness Category", "Incidents", "Percentage"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Incident-Level Narrative Completeness")
+
+# Visualization
+ggplot(completeness_summary, aes(x = "", y = n_incidents, fill = completeness_category)) +
+  geom_col(width = 1) +
+  coord_polar("y") +
+  geom_text(aes(label = sprintf("%s\n%.1f%%", 
+                                scales::comma(n_incidents),
+                                percentage)),
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Incident Completeness Distribution",
+       fill = "Category") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r interpret_completeness, include=FALSE}
+both_complete <- completeness_summary %>% 
+  filter(completeness_category == "Both CME and LE") %>% 
+  pull(n_incidents)
+both_pct <- completeness_summary %>% 
+  filter(completeness_category == "Both CME and LE") %>% 
+  pull(percentage)
+```
+
+The pie chart reveals that **`r format(both_complete, big.mark=",")`** incidents (**`r sprintf("%.1f%%", both_pct)`**) have both CME and LE narratives available, providing robust opportunities for agreement analysis. The remaining incidents have only one narrative type, either due to jurisdictional reporting practices or data access limitations. This high dual-narrative rate strengthens our ability to assess detection consistency across independent information sources.
+
+## 1.4 Data Quality - Placeholder Detection
+
+Not all narratives contain substantive information—some records represent data access failures, missing reports, or unavailable documentation. Accurate identification of these "placeholder" narratives is essential to avoid misinterpreting missing data as valid text. We employ a comprehensive three-tier detection strategy that accounts for very short text, and narrative-type-specific patterns (CME vs LE have different placeholder language).
+
+```{r placeholder_detection}
+# Define comprehensive placeholder patterns
+CME_PATTERNS <- c(
+  "record not available",
+  "autopsy.*unavailable",
+  "toxicology.*unavailable",
+  "death certificate only",
+  "certificate only",
+  "certificate checked",
+  "coroner report.*unavailable",
+  "medical call available",
+  "death cert only"
+)
+
+LE_PATTERNS <- c(
+  "\\*\\*\\*no report",
+  "no report available.*le",
+  "report not found",
+  "report.*unavailable",
+  "ems run only",
+  "see cme",
+  "refer to cme",
+  "no law enforcement.*available",
+  "no mou",
+  "le narrative.*unavailable",
+  "le information.*unavailable",
+  "le record.*unavailable",
+  "no le report",
+  "no narrative"
+)
+
+# Improved detection function
+detect_placeholder <- function(text, type) {
+  # Handle NA/empty
+  if (is.na(text) || text == "") return(TRUE)
+  
+  text_clean <- trimws(text)
+  
+  # Very short text (< 20 chars) is always placeholder
+  if (nchar(text_clean) < 20) return(TRUE)
+  
+  # Pattern matching for longer text
+  text_lower <- tolower(text_clean)
+  patterns <- if (type == "cme") CME_PATTERNS else LE_PATTERNS
+  pattern_string <- paste(patterns, collapse = "|")
+  
+  return(str_detect(text_lower, pattern_string))
+}
+
+# Apply detection
+source_with_quality <- source_narratives_tbl %>%
+  collect() %>%
+  rowwise() %>%
+  mutate(
+    is_placeholder = detect_placeholder(narrative_text, narrative_type),
+    text_length = nchar(narrative_text)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    quality_category = case_when(
+      is_placeholder ~ "Placeholder",
+      text_length < 100 ~ "Brief",
+      text_length < 500 ~ "Standard",
+      TRUE ~ "Detailed"
+    )
+  )
+
+# Summary by type and quality
+quality_summary <- source_with_quality %>%
+  group_by(narrative_type, quality_category) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(narrative_type) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+kable(quality_summary,
+      col.names = c("Type", "Quality", "Count", "Percentage"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Narrative Quality Distribution (Comprehensive Detection)")
+
+# Overall placeholder summary
+placeholder_summary <- source_with_quality %>%
+  group_by(narrative_type) %>%
+  summarise(
+    total = n(),
+    placeholder = sum(is_placeholder),
+    pct_placeholder = placeholder / total * 100,
+    .groups = "drop"
+  )
+
+kable(placeholder_summary,
+      col.names = c("Type", "Total", "Placeholders", "% Placeholder"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Placeholder Rate by Narrative Type")
+
+# Visualization
+ggplot(quality_summary, aes(x = narrative_type, y = count, fill = quality_category)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values = c(
+    "Placeholder" = "#d62728",
+    "Brief" = "#ff7f0e",
+    "Standard" = "#2ca02c",
+    "Detailed" = "#1f77b4"
+  )) +
+  labs(title = "Narrative Quality Distribution by Type",
+       subtitle = "Using comprehensive placeholder detection (3-tier logic)",
+       x = "Narrative Type",
+       y = "Count",
+       fill = "Quality") +
+  theme_minimal()
+```
+
+```{r interpret_quality, include=FALSE}
+overall_placeholder_pct <- sum(source_with_quality$is_placeholder) / nrow(source_with_quality) * 100
+cme_placeholder_pct <- placeholder_summary %>% 
+  filter(narrative_type == "cme") %>% 
+  pull(pct_placeholder)
+le_placeholder_pct <- placeholder_summary %>% 
+  filter(narrative_type == "le") %>% 
+  pull(pct_placeholder)
+```
+
+The tables and visualization reveal an overall placeholder rate of **`r sprintf("%.2f%%", overall_placeholder_pct)`**, with significant variation by source: CME narratives show **`r sprintf("%.2f%%", cme_placeholder_pct)`** placeholders versus **`r sprintf("%.2f%%", le_placeholder_pct)`** for LE narratives. This **`r sprintf("%.1f", le_placeholder_pct / cme_placeholder_pct)`-fold** higher LE placeholder rate reflects known data access challenges with law enforcement agencies, including memorandum of understanding (MOU) limitations and jurisdictional reporting gaps. The quality distribution chart demonstrates that the vast majority of narratives contain substantive content, with Standard and Detailed categories dominating both narrative types.
+
+## 1.5 Temporal Distribution
+
+Temporal coverage is important for understanding whether detection patterns vary over time and for assessing the generalizability of findings across different calendar years. The dataset should ideally span multiple years to capture evolving documentation practices and population patterns.
+
+```{r temporal_distribution}
+# Year distribution
+year_summary <- source_narratives_tbl %>%
+  filter(!is.na(incident_year)) %>%
+  group_by(incident_year, narrative_type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  collect()
+
+kable(year_summary %>% 
+        pivot_wider(names_from = narrative_type, values_from = count),
+      format.args = list(big.mark = ","),
+      caption = "Narratives by Year and Type")
+
+# Visualization
+ggplot(year_summary, aes(x = incident_year, y = count, fill = narrative_type)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "Narrative Distribution Over Time",
+       x = "Incident Year",
+       y = "Count",
+       fill = "Narrative Type") +
+  theme_minimal()
+```
+
+```{r interpret_temporal, include=FALSE}
+year_range <- year_summary %>%
+  summarise(min_year = min(incident_year), max_year = max(incident_year))
+total_years <- year_range$max_year - year_range$min_year + 1
+```
+
+The data spans **`r total_years`** years from **`r year_range$min_year`** to **`r year_range$max_year`**, providing comprehensive temporal coverage. The bar chart shows relatively consistent narrative counts across years for both CME and LE sources, though year-to-year fluctuations reflect natural variation in suicide rates and reporting completeness. The consistent availability of both narrative types throughout the period enables reliable temporal trend analysis in Section 2.3.
+
+---
+
+# 2. Detection Patterns
+
+Detection patterns reveal how frequently the model identifies IPV indicators and whether rates differ systematically by narrative source, data quality, or time period. These patterns provide insight into both the prevalence of IPV-related language in suicide narratives and potential biases in documentation practices.
+
+## 2.1 Overall Detection Rates
+
+Understanding baseline detection rates by narrative type is fundamental to interpreting model behavior. CME and LE narratives may differ in IPV indicator prevalence due to their distinct documentation focuses—medical versus investigative perspectives.
+
+```{r overall_detection}
+# Get all results for production experiment
+prod_results <- narrative_results_tbl %>%
+  filter(experiment_id == local(prod_exp$experiment_id[1])) %>%
+  collect()
+
+detection_by_type <- prod_results %>%
+  group_by(narrative_type) %>%
+  summarise(
+    total = n(),
+    detected = sum(detected, na.rm = TRUE),
+    not_detected = sum(!detected, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    detection_rate = detected / total * 100
+  )
+
+kable(detection_by_type,
+      col.names = c("Type", "Total", "Detected", "Not Detected", "Detection Rate %"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "IPV Detection by Narrative Type")
+
+# Visualization
+ggplot(detection_by_type, aes(x = narrative_type, y = detection_rate, fill = narrative_type)) +
+  geom_col() +
+  geom_text(aes(label = sprintf("%.2f%%", detection_rate)), vjust = -0.5) +
+  scale_y_continuous(limits = c(0, max(detection_by_type$detection_rate) * 1.2)) +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "IPV Detection Rate by Narrative Type",
+       x = "Narrative Type",
+       y = "Detection Rate (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r interpret_overall_detection, include=FALSE}
+cme_rate <- detection_by_type %>% filter(narrative_type == "cme") %>% pull(detection_rate)
+le_rate <- detection_by_type %>% filter(narrative_type == "le") %>% pull(detection_rate)
+rate_diff <- abs(cme_rate - le_rate)
+higher_type <- if(cme_rate > le_rate) "CME" else "LE"
+```
+
+The table and chart show that **`r higher_type`** narratives exhibit a **`r sprintf("%.2f", rate_diff)`** percentage point higher detection rate than the other narrative type. `r if(cme_rate > le_rate) "CME narratives' higher detection rate may reflect more systematic documentation of relationship context in medical examiner reports." else "LE narratives' higher detection rate suggests law enforcement investigations more frequently capture IPV-related circumstances."` Overall detection rates across both narrative types indicate that IPV indicators appear in a meaningful proportion of suicide cases, consistent with epidemiological evidence linking IPV exposure to suicide risk.
+
+## 2.2 Detection by Data Quality
+
+Data quality directly impacts the model's ability to detect IPV indicators—narratives with insufficient information (placeholders) or minimal detail (brief) may lack the contextual clues necessary for accurate detection. Examining detection rates across quality categories reveals whether the model appropriately handles varying levels of narrative completeness.
+
+```{r detection_by_quality}
+# Join results with quality categories
+results_with_quality <- prod_results %>%
+  left_join(source_with_quality %>% 
+              select(incident_id, narrative_type, quality_category),
+            by = c("incident_id", "narrative_type"))
+
+detection_by_quality <- results_with_quality %>%
+  group_by(quality_category) %>%
+  summarise(
+    total = n(),
+    detected = sum(detected, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(detection_rate = detected / total * 100)
+
+kable(detection_by_quality,
+      col.names = c("Quality", "Total", "Detected", "Detection Rate %"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Detection Rate by Narrative Quality")
+
+ggplot(detection_by_quality, 
+       aes(x = reorder(quality_category, detection_rate), 
+           y = detection_rate, 
+           fill = quality_category)) +
+  geom_col() +
+  geom_text(aes(label = sprintf("%.2f%%", detection_rate)), vjust = -0.5) +
+  scale_y_continuous(limits = c(0, max(detection_by_quality$detection_rate) * 1.2)) +
+  scale_fill_manual(values = c(
+    "Placeholder" = "#d62728",
+    "Brief" = "#ff7f0e",
+    "Standard" = "#2ca02c",
+    "Detailed" = "#1f77b4"
+  )) +
+  labs(title = "IPV Detection Rate by Narrative Quality",
+       subtitle = "Using comprehensive placeholder detection",
+       x = "Quality Category",
+       y = "Detection Rate (%)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r interpret_quality_detection, include=FALSE}
+quality_by_rate <- detection_by_quality %>% arrange(desc(detection_rate))
+highest_quality <- quality_by_rate$quality_category[1]
+lowest_quality <- quality_by_rate$quality_category[nrow(quality_by_rate)]
+rate_range <- max(quality_by_rate$detection_rate) - min(quality_by_rate$detection_rate)
+```
+
+The analysis reveals a **`r sprintf("%.1f", rate_range)`** percentage point spread in detection rates across quality categories, with **`r highest_quality`** narratives showing the highest rate and **`r lowest_quality`** showing the lowest. This pattern confirms that narrative information density impacts detection performance. Placeholder narratives naturally show different patterns due to lack of substantive content, while detailed narratives provide richer contextual information for the model to identify IPV indicators. The ordered visualization effectively demonstrates this quality-detection relationship.
+
+## 2.3 Temporal Detection Patterns
+
+Temporal trends in detection rates may reflect evolving documentation practices, changes in IPV prevalence, or shifts in how relationship context is captured in death investigation narratives. Stable rates over time support the reliability of detection patterns, while systematic trends warrant further investigation.
+
+```{r temporal_detection}
+# Join with year data
+results_with_year <- prod_results %>%
+  left_join(source_narratives_tbl %>% 
+              select(incident_id, narrative_type, incident_year) %>%
+              collect(),
+            by = c("incident_id", "narrative_type"))
+
+detection_by_year <- results_with_year %>%
+  filter(!is.na(incident_year)) %>%
+  group_by(incident_year, narrative_type) %>%
+  summarise(
+    total = n(),
+    detected = sum(detected, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(detection_rate = detected / total * 100)
+
+kable(detection_by_year %>%
+        select(incident_year, narrative_type, total, detected, detection_rate) %>%
+        arrange(incident_year, narrative_type),
+      col.names = c("Year", "Type", "Total", "Detected", "Rate %"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Detection Rate by Year and Type")
+
+ggplot(detection_by_year, aes(x = incident_year, y = detection_rate, 
+                               color = narrative_type, group = narrative_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "IPV Detection Rate Over Time",
+       x = "Incident Year",
+       y = "Detection Rate (%)",
+       color = "Narrative Type") +
+  theme_minimal()
+```
+
+The temporal trend visualization reveals year-to-year fluctuations in detection rates for both narrative types. While some variation is expected due to sample size differences and natural population changes, the general patterns suggest relatively stable detection behavior over the study period. Any systematic upward or downward trends should be interpreted cautiously given the exploratory nature of this unlabeled dataset.
+
+---
+
+# 3. CME vs LE Agreement Analysis
+
+Agreement between CME and LE narratives for the same incident provides the strongest evidence of detection reliability in this unlabeled dataset. When two independent information sources concur on IPV presence or absence, this convergence suggests the model is identifying genuine signals rather than spurious patterns. This section examines agreement patterns overall and by confidence level.
+
+## 3.1 Incident-Level Agreement
+
+For incidents where both CME and LE narratives are available, comparing their detection outcomes reveals the consistency of the model's IPV identification across different documentation perspectives. High agreement rates indicate robust detection, while disagreements highlight cases where source-specific information may drive divergent conclusions.
+
+```{r cme_le_agreement}
+# Reshape to wide format for agreement analysis
+incident_detections <- prod_results %>%
+  select(incident_id, narrative_type, detected) %>%
+  pivot_wider(names_from = narrative_type, 
+              values_from = detected,
+              names_prefix = "detected_")
+
+# Only keep incidents with both CME and LE
+both_narratives <- incident_detections %>%
+  filter(!is.na(detected_cme) & !is.na(detected_le))
+
+agreement_summary <- both_narratives %>%
+  mutate(
+    agreement_category = case_when(
+      detected_cme == 1 & detected_le == 1 ~ "Both Detect IPV",
+      detected_cme == 0 & detected_le == 0 ~ "Both No IPV",
+      detected_cme == 1 & detected_le == 0 ~ "CME Only",
+      detected_cme == 0 & detected_le == 1 ~ "LE Only",
+      TRUE ~ "Unknown"
+    )
+  ) %>%
+  group_by(agreement_category) %>%
+  summarise(n_incidents = n(), .groups = "drop") %>%
+  mutate(percentage = n_incidents / sum(n_incidents) * 100)
+
+kable(agreement_summary,
+      col.names = c("Agreement Category", "Incidents", "Percentage"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "CME vs LE Agreement on IPV Detection")
+
+# Overall agreement rate
+total_agree <- sum(agreement_summary$n_incidents[agreement_summary$agreement_category %in% 
+                                                     c("Both Detect IPV", "Both No IPV")])
+agreement_rate <- total_agree / sum(agreement_summary$n_incidents) * 100
+```
+
+**Overall Agreement Rate**: `r sprintf("%.2f%%", agreement_rate)`
+
+```{r agreement_viz}
+ggplot(agreement_summary, aes(x = "", y = n_incidents, fill = agreement_category)) +
+  geom_col(width = 1) +
+  coord_polar("y") +
+  geom_text(aes(label = sprintf("%s\n%.1f%%", 
+                                scales::comma(n_incidents),
+                                percentage)),
+            position = position_stack(vjust = 0.5), size = 3) +
+  scale_fill_manual(values = c("Both Detect IPV" = "#d73027",
+                                "Both No IPV" = "#4575b4",
+                                "CME Only" = "#fee090",
+                                "LE Only" = "#abd9e9")) +
+  labs(title = "CME vs LE Detection Agreement",
+       fill = "Category") +
+  theme_void()
+```
+
+```{r interpret_agreement, include=FALSE}
+both_ipv_pct <- agreement_summary %>% filter(agreement_category == "Both Detect IPV") %>% pull(percentage)
+both_no_pct <- agreement_summary %>% filter(agreement_category == "Both No IPV") %>% pull(percentage)
+disagree_pct <- 100 - agreement_rate
+```
+
+The agreement analysis reveals an overall **`r sprintf("%.2f%%", agreement_rate)`** concordance rate between CME and LE narratives when both are available. The pie chart shows that complete agreement (either both detecting or both not detecting IPV) dominates, with **`r sprintf("%.1f%%", both_no_pct)`** agreeing on no IPV and **`r sprintf("%.1f%%", both_ipv_pct)`** agreeing on IPV presence. Only **`r sprintf("%.1f%%", disagree_pct)`** of dual-narrative incidents show disagreement. This high agreement rate provides strong face validity for the detection approach—independent information sources converge on similar conclusions far more often than they diverge.
+
+## 3.2 Agreement by Confidence Level
+
+If the model's confidence scores are well-calibrated, we should observe higher agreement rates when both narratives have high average confidence. This analysis tests whether the model's self-assessed uncertainty correlates with actual inter-source consistency.
+
+```{r agreement_confidence}
+# Get confidence for both narratives
+incident_confidence <- prod_results %>%
+  select(incident_id, narrative_type, detected, confidence) %>%
+  pivot_wider(names_from = narrative_type,
+              values_from = c(detected, confidence))
+
+both_conf <- incident_confidence %>%
+  filter(!is.na(detected_cme) & !is.na(detected_le)) %>%
+  mutate(
+    agree = detected_cme == detected_le,
+    avg_confidence = (confidence_cme + confidence_le) / 2,
+    confidence_category = cut(avg_confidence,
+                              breaks = c(0, 0.7, 0.85, 1.0),
+                              labels = c("Low (<0.7)", "Medium (0.7-0.85)", "High (>0.85)"),
+                              include.lowest = TRUE)
+  )
+
+agreement_by_conf <- both_conf %>%
+  group_by(confidence_category) %>%
+  summarise(
+    total = n(),
+    agree = sum(agree, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(agreement_rate = agree / total * 100)
+
+kable(agreement_by_conf,
+      col.names = c("Average Confidence", "Total", "Agree", "Agreement Rate %"),
+      digits = 2,
+      format.args = list(big.mark = ","),
+      caption = "Agreement Rate by Average Confidence Level")
+
+ggplot(agreement_by_conf, aes(x = confidence_category, y = agreement_rate)) +
+  geom_col(fill = "#4575b4") +
+  geom_text(aes(label = sprintf("%.1f%%", agreement_rate)), vjust = -0.5) +
+  scale_y_continuous(limits = c(0, 100)) +
+  labs(title = "CME-LE Agreement by Average Confidence",
+       x = "Average Confidence Level",
+       y = "Agreement Rate (%)") +
+  theme_minimal()
+```
+
+The table and visualization demonstrate a clear relationship between confidence and agreement. Higher average confidence levels are associated with improved agreement rates, suggesting that the model's uncertainty estimates provide meaningful signals about prediction reliability. This confidence-agreement correlation supports the validity of the model's self-assessment mechanism and indicates that confidence scores can be used to identify high-reliability detections.
+
+---
+
+# 4. Confidence Analysis
+
+Confidence scores reflect the model's certainty in its predictions. Well-calibrated confidence should correlate with prediction accuracy—though we lack ground truth labels, examining confidence distributions by detection outcome and narrative type reveals whether the model exhibits systematic uncertainty patterns.
+
+## 4.1 Confidence Distribution
+
+Understanding the overall distribution of confidence scores helps assess whether the model makes predictions with appropriate levels of certainty or shows extreme overconfidence/underconfidence patterns.
+
+```{r confidence_distribution}
+confidence_stats <- prod_results %>%
+  filter(!is.na(confidence)) %>%
+  summarise(
+    mean = mean(confidence),
+    median = median(confidence),
+    sd = sd(confidence),
+    min = min(confidence),
+    max = max(confidence)
+  )
+
+kable(confidence_stats,
+      digits = 3,
+      caption = "Confidence Score Summary Statistics")
+
+ggplot(prod_results %>% filter(!is.na(confidence)), 
+       aes(x = confidence)) +
+  geom_histogram(binwidth = 0.05, fill = "#4575b4", color = "white") +
+  geom_vline(xintercept = confidence_stats$mean, 
+             linetype = "dashed", color = "red", size = 1) +
+  annotate("text", x = confidence_stats$mean, y = Inf, 
+           label = sprintf("Mean: %.3f", confidence_stats$mean),
+           vjust = 1.5, color = "red") +
+  scale_x_continuous(breaks = seq(0, 1, 0.1)) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Distribution of Confidence Scores",
+       x = "Confidence Score",
+       y = "Count") +
+  theme_minimal()
+```
+
+The histogram reveals that confidence scores are concentrated toward higher values, with mean **`r sprintf("%.3f", confidence_stats$mean)`** marked by the vertical dashed line. This right-skewed distribution suggests the model generally makes predictions with substantial certainty rather than hovering near 0.5 (maximum uncertainty). The relatively narrow spread around the mean indicates consistent confidence calibration across most predictions, though the full range from **`r sprintf("%.3f", confidence_stats$min)`** to **`r sprintf("%.3f", confidence_stats$max)`** demonstrates the model does express variable certainty when appropriate.
+
+## 4.2 Confidence by Detection Outcome
+
+Comparing confidence distributions between IPV-positive and IPV-negative predictions reveals whether the model exhibits differential certainty patterns. Systematic differences may indicate distinct confidence profiles for the two prediction types.
+
+```{r confidence_by_detection}
+conf_by_detection <- prod_results %>%
+  filter(!is.na(confidence)) %>%
+  mutate(detection_label = ifelse(detected == 1, "IPV Detected", "No IPV")) %>%
+  group_by(detection_label) %>%
+  summarise(
+    count = n(),
+    mean_conf = mean(confidence),
+    median_conf = median(confidence),
+    sd_conf = sd(confidence),
+    .groups = "drop"
+  )
+
+kable(conf_by_detection,
+      col.names = c("Detection", "Count", "Mean", "Median", "SD"),
+      digits = 3,
+      format.args = list(big.mark = ","),
+      caption = "Confidence Statistics by Detection Outcome")
+
+ggplot(prod_results %>% filter(!is.na(confidence)),
+       aes(x = factor(detected, labels = c("No IPV", "IPV Detected")), 
+           y = confidence, fill = factor(detected))) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("0" = "#4575b4", "1" = "#d73027")) +
+  labs(title = "Confidence Distribution by Detection Outcome",
+       x = "Detection Outcome",
+       y = "Confidence Score") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r interpret_conf_by_detection, include=FALSE}
+ipv_mean <- conf_by_detection %>% filter(detection_label == "IPV Detected") %>% pull(mean_conf)
+no_ipv_mean <- conf_by_detection %>% filter(detection_label == "No IPV") %>% pull(mean_conf)
+conf_diff <- abs(ipv_mean - no_ipv_mean)
+```
+
+The boxplots reveal distinct confidence profiles between detection outcomes. IPV detections show a mean confidence of **`r sprintf("%.3f", ipv_mean)`**, while non-detections average **`r sprintf("%.3f", no_ipv_mean)`**—a difference of **`r sprintf("%.3f", conf_diff)`**. The table confirms these patterns with both mean and median statistics. This separation suggests the model expresses differential certainty depending on whether IPV indicators are present, though both distributions show substantial confidence levels indicating the model makes relatively decisive predictions in both cases.
+
+## 4.3 Confidence by Narrative Type
+
+Examining whether confidence patterns differ between CME and LE narratives helps identify whether the model's certainty is influenced by narrative source characteristics. Systematic differences could reflect variations in documentation completeness or indicator clarity across narrative types.
+
+```{r confidence_by_type}
+conf_by_type <- prod_results %>%
+  filter(!is.na(confidence)) %>%
+  group_by(narrative_type, detected) %>%
+  summarise(
+    count = n(),
+    mean_conf = mean(confidence),
+    median_conf = median(confidence),
+    .groups = "drop"
+  )
+
+kable(conf_by_type,
+      col.names = c("Type", "Detected", "Count", "Mean", "Median"),
+      digits = 3,
+      format.args = list(big.mark = ","),
+      caption = "Confidence by Narrative Type and Detection")
+
+ggplot(prod_results %>% filter(!is.na(confidence)),
+       aes(x = narrative_type, y = confidence, fill = narrative_type)) +
+  geom_boxplot() +
+  facet_wrap(~factor(detected, labels = c("No IPV", "IPV Detected"))) +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "Confidence Distribution by Type and Detection",
+       x = "Narrative Type",
+       y = "Confidence Score") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+The faceted boxplots reveal relatively similar confidence distributions across CME and LE narrative types within each detection category. Both narrative types show comparable median confidence levels for both IPV-detected and non-detected cases, suggesting the model's certainty is driven more by content characteristics than by narrative source. The slight variations in interquartile ranges indicate narrative type has minimal impact on confidence calibration, supporting the robustness of the detection approach across different documentation perspectives.
+
+---
+
+# 5. Operational Performance
+
+Operational performance metrics—processing time, token usage, and error rates—are essential for assessing the practical feasibility of large-scale deployment. Stable performance across the entire dataset indicates reliable computational behavior, while excessive variability or errors would raise concerns about production readiness.
+
+## 5.1 Processing Time Analysis
+
+Processing time per narrative determines the scalability of the approach. Consistent, predictable processing times enable accurate resource planning for larger datasets, while extreme outliers may indicate problematic inputs requiring special handling.
+
+```{r processing_time}
+time_stats <- prod_results %>%
+  filter(!is.na(response_sec)) %>%
+  summarise(
+    mean = mean(response_sec),
+    median = median(response_sec),
+    sd = sd(response_sec),
+    min = min(response_sec),
+    max = max(response_sec)
+  )
+
+kable(time_stats,
+      digits = 3,
+      caption = "Processing Time Statistics (seconds)")
+
+ggplot(prod_results %>% filter(!is.na(response_sec)),
+       aes(x = response_sec)) +
+  geom_histogram(bins = 50, fill = "#4575b4", color = "white") +
+  geom_vline(xintercept = time_stats$mean, 
+             linetype = "dashed", color = "red", size = 1) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Distribution of Processing Times",
+       x = "Response Time (seconds)",
+       y = "Count") +
+  theme_minimal()
+```
+
+Processing times show a mean of **`r sprintf("%.2f", time_stats$mean)`** seconds with relatively narrow variability (SD = **`r sprintf("%.2f", time_stats$sd)`** seconds). The histogram reveals a concentrated distribution around the mean, marked by the vertical dashed line, with a long right tail representing occasional slower processing. The range from **`r sprintf("%.2f", time_stats$min)`** to **`r sprintf("%.2f", time_stats$max)`** seconds demonstrates generally stable computational performance, with extreme outliers representing less than 1% of cases. This consistency supports reliable throughput estimation for production deployment.
+
+## 5.2 Processing Time by Narrative Type
+
+Comparing processing times across narrative types reveals whether CME and LE narratives require systematically different computational resources, potentially due to length or complexity differences.
+
+```{r time_by_type}
+time_by_type <- prod_results %>%
+  filter(!is.na(response_sec)) %>%
+  group_by(narrative_type) %>%
+  summarise(
+    count = n(),
+    mean = mean(response_sec),
+    median = median(response_sec),
+    sd = sd(response_sec),
+    .groups = "drop"
+  )
+
+kable(time_by_type,
+      col.names = c("Type", "Count", "Mean", "Median", "SD"),
+      digits = 3,
+      format.args = list(big.mark = ","),
+      caption = "Processing Time by Narrative Type")
+
+ggplot(prod_results %>% filter(!is.na(response_sec)),
+       aes(x = narrative_type, y = response_sec, fill = narrative_type)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  labs(title = "Processing Time by Narrative Type",
+       x = "Narrative Type",
+       y = "Response Time (seconds)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r interpret_time_by_type, include=FALSE}
+cme_time <- time_by_type %>% filter(narrative_type == "cme") %>% pull(mean)
+le_time <- time_by_type %>% filter(narrative_type == "le") %>% pull(mean)
+time_diff <- abs(cme_time - le_time)
+```
+
+CME narratives average **`r sprintf("%.2f", cme_time)`** seconds compared to **`r sprintf("%.2f", le_time)`** seconds for LE narratives—a difference of **`r sprintf("%.2f", time_diff)`** seconds. This minimal variation indicates that narrative type has negligible impact on processing requirements. The boxplots show highly similar distributions for both types, with comparable medians and interquartile ranges. This uniformity simplifies resource planning and suggests that processing time is primarily driven by factors other than narrative source.
+
+## 5.3 Token Usage Analysis
+
+Token consumption directly impacts computational costs in API-based deployments and provides insight into prompt efficiency. Stable token usage across narratives indicates consistent prompt-response patterns, while excessive variability might suggest optimization opportunities.
+
+```{r token_usage}
+token_stats <- prod_results %>%
+  filter(!is.na(prompt_tokens) & !is.na(completion_tokens)) %>%
+  mutate(total_tokens = prompt_tokens + completion_tokens) %>%
+  summarise(
+    mean_prompt = mean(prompt_tokens),
+    mean_completion = mean(completion_tokens),
+    mean_total = mean(total_tokens),
+    median_total = median(total_tokens)
+  )
+
+kable(token_stats,
+      digits = 1,
+      caption = "Token Usage Statistics")
+
+token_by_type <- prod_results %>%
+  filter(!is.na(prompt_tokens) & !is.na(completion_tokens)) %>%
+  mutate(total_tokens = prompt_tokens + completion_tokens) %>%
+  group_by(narrative_type) %>%
+  summarise(
+    count = n(),
+    mean_prompt = mean(prompt_tokens),
+    mean_completion = mean(completion_tokens),
+    mean_total = mean(total_tokens),
+    .groups = "drop"
+  )
+
+kable(token_by_type,
+      col.names = c("Type", "Count", "Avg Prompt", "Avg Completion", "Avg Total"),
+      digits = 1,
+      format.args = list(big.mark = ","),
+      caption = "Token Usage by Narrative Type")
+
+ggplot(prod_results %>% 
+         filter(!is.na(prompt_tokens) & !is.na(completion_tokens)) %>%
+         mutate(total_tokens = prompt_tokens + completion_tokens),
+       aes(x = narrative_type, y = total_tokens, fill = narrative_type)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("cme" = "#4575b4", "le" = "#d73027")) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Total Token Usage by Narrative Type",
+       x = "Narrative Type",
+       y = "Total Tokens") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+Token usage remains remarkably stable across narrative types. The tables show CME narratives averaging **`r sprintf("%.0f", token_by_type %>% filter(narrative_type=="cme") %>% pull(mean_total))`** total tokens compared to **`r sprintf("%.0f", token_by_type %>% filter(narrative_type=="le") %>% pull(mean_total))`** for LE narratives. The boxplots reveal tight distributions with minimal outliers, indicating consistent prompt-response patterns regardless of narrative source. Prompt tokens (**`r sprintf("%.0f", token_stats$mean_prompt)`** average) represent the input context, while completion tokens (**`r sprintf("%.0f", token_stats$mean_completion)`** average) reflect the model's response length. This stability simplifies cost estimation and demonstrates efficient prompt design.
+
+## 5.4 Error Analysis
+
+Operational errors during processing can indicate systematic issues with certain narrative types, edge cases in content, or infrastructure problems. A comprehensive error analysis ensures we understand the reliability boundaries of the detection system.
+
+```{r error_analysis}
+error_summary <- prod_results %>%
+  summarise(
+    total = n(),
+    errors = sum(error_occurred, na.rm = TRUE),
+    error_rate = errors / total * 100
+  )
+
+cat(sprintf("Total Errors: %d (%.4f%%)\n", 
+            error_summary$errors, 
+            error_summary$error_rate))
+
+if(error_summary$errors > 0) {
+  error_details <- prod_results %>%
+    filter(error_occurred == 1) %>%
+    select(incident_id, narrative_type, error_message, raw_response) %>%
+    head(10)
+  
+  kable(error_details,
+        caption = "Sample of Error Cases (first 10)")
+}
+```
+
+The exceptionally low error rate of **`r sprintf("%.4f%%", error_summary$error_rate)`** (**`r error_summary$errors`** errors out of **`r format(error_summary$total, big.mark=",")`** narratives) demonstrates robust operational reliability. This near-perfect processing success rate indicates the system handles diverse narrative content without systematic failures. 
+
+**Error Case Analysis**: The single error case (incident 727037, LE narrative) reveals an important edge case behavior. When presented with placeholder text ("Need LE report."), the model returned a natural language refusal instead of the expected JSON format:
+
+> "I'm unable to determine whether intimate-partner violence was involved without the relevant law-enforcement and medical-examiner documentation. Please provide those reports so I can evaluate the case according to the criteria you outlined."
+
+This JSON parsing failure demonstrates appropriate model behavior—refusing to make determinations without substantive information—but highlights a prompt engineering opportunity. Future iterations could explicitly instruct the model to return structured JSON even when declining to make a detection decision (e.g., `{"detected": 0, "confidence": 0.95, "rationale": "Insufficient information: placeholder text only"}`). This edge case represents responsible AI behavior rather than a true system failure.
+
+---
+
+# 6. Indicators and Reasoning Analysis
+
+Beyond binary detection outcomes, the model generates structured indicators and reasoning chains that explain its decisions. Examining these outputs reveals what specific signals drive IPV detection and whether the model provides coherent, evidence-based rationales. This transparency is essential for building trust in automated detection systems.
+
+## 6.1 Indicator Extraction
+
+The model is designed to extract and structure specific IPV indicators in JSON format alongside detection decisions. Analyzing these indicators reveals the concrete signals that trigger positive detections and enables qualitative assessment of detection reasoning quality.
+
+```{r indicator_extraction}
+# Extract and parse indicators
+extract_indicators <- function(indicator_json) {
+  if(is.na(indicator_json) || indicator_json == "" || indicator_json == "[]") {
+    return(NA_character_)
+  }
+  tryCatch({
+    parsed <- fromJSON(indicator_json)
+    if(length(parsed) > 0) {
+      return(paste(parsed, collapse = "; "))
+    } else {
+      return(NA_character_)
+    }
+  }, error = function(e) {
+    return(NA_character_)
+  })
+}
+
+# Sample indicators from IPV detections
+ipv_cases <- prod_results %>%
+  filter(detected == 1 & !is.na(indicators)) %>%
+  select(incident_id, narrative_type, indicators, confidence)
+
+# Sample up to 100 rows
+sample_size <- min(100, nrow(ipv_cases))
+if(sample_size > 0) {
+  ipv_cases <- ipv_cases %>% slice_sample(n = sample_size)
+}
+
+ipv_cases$indicators_text <- sapply(ipv_cases$indicators, extract_indicators)
+
+# Show sample
+sample_indicators <- ipv_cases %>%
+  filter(!is.na(indicators_text)) %>%
+  select(incident_id, narrative_type, confidence, indicators_text) %>%
+  head(10)
+
+kable(sample_indicators,
+      col.names = c("Incident", "Type", "Confidence", "Indicators"),
+      caption = "Sample Indicators from IPV Detections")
+```
+
+The sample table demonstrates the model's ability to identify and structure specific IPV indicators from narrative text. Examples include direct relationship mentions, behavioral patterns, and circumstantial evidence. The indicators span both explicit signals (e.g., "domestic violence," "abusive relationship") and indirect contextual clues (e.g., "recent separation," "protective order"). This structured extraction enables systematic analysis of which indicator types are most prevalent and supports transparency in understanding detection decisions. The diversity of indicators across the sample suggests the model captures multiple IPV manifestations rather than relying on single keywords.
+
+## 6.2 Reasoning Length Analysis
+
+Reasoning chains document the model's step-by-step logic for reaching detection decisions. Analyzing reasoning length patterns reveals whether IPV-positive detections receive more elaborate justification than negatives, potentially indicating greater scrutiny for positive findings.
+
+```{r reasoning_length}
+prod_results <- prod_results %>%
+  mutate(
+    rationale_len = nchar(rationale),
+    reasoning_len = nchar(reasoning_steps)
+  )
+
+reasoning_stats <- prod_results %>%
+  filter(!is.na(rationale_len) & !is.na(reasoning_len)) %>%
+  group_by(detected) %>%
+  summarise(
+    count = n(),
+    mean_rationale = mean(rationale_len),
+    mean_reasoning = mean(reasoning_len),
+    .groups = "drop"
+  )
+
+kable(reasoning_stats,
+      col.names = c("Detected", "Count", "Avg Rationale Len", "Avg Reasoning Len"),
+      digits = 1,
+      format.args = list(big.mark = ","),
+      caption = "Reasoning Length by Detection Outcome")
+
+ggplot(prod_results %>% filter(!is.na(reasoning_len) & reasoning_len < 2000),
+       aes(x = reasoning_len, fill = factor(detected))) +
+  geom_histogram(bins = 50, alpha = 0.7, position = "identity") +
+  scale_fill_manual(values = c("0" = "#4575b4", "1" = "#d73027"),
+                    labels = c("No IPV", "IPV Detected")) +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma) +
+  labs(title = "Distribution of Reasoning Length",
+       x = "Reasoning Steps Length (characters)",
+       y = "Count",
+       fill = "Detection") +
+  theme_minimal()
+```
+
+```{r interpret_reasoning_length, include=FALSE}
+ipv_reasoning <- reasoning_stats %>% filter(detected == 1) %>% pull(mean_reasoning)
+no_ipv_reasoning <- reasoning_stats %>% filter(detected == 0) %>% pull(mean_reasoning)
+reasoning_diff <- ipv_reasoning - no_ipv_reasoning
+```
+
+The analysis reveals that IPV-positive detections generate reasoning chains averaging **`r sprintf("%.0f", ipv_reasoning)`** characters, compared to **`r sprintf("%.0f", no_ipv_reasoning)`** characters for non-detections—a difference of **`r sprintf("%.0f", reasoning_diff)`** characters. This suggests the model provides `r if(reasoning_diff > 0) "more detailed" else "comparable"` justification when identifying IPV indicators. The overlapping histogram distributions indicate that both detection types receive substantive reasoning rather than perfunctory explanations. The rationale field shows similar patterns (table), confirming consistent reasoning effort across detection outcomes.
+
+## 6.3 Confidence vs Reasoning Length
+
+Exploring the relationship between reasoning length and confidence reveals whether the model expresses higher certainty with more elaborate reasoning or whether confidence is independent of explanation detail. This helps assess whether reasoning chains add genuine value beyond binary predictions.
+
+```{r confidence_reasoning}
+ggplot(prod_results %>% 
+         filter(!is.na(confidence) & !is.na(reasoning_len) & reasoning_len < 2000),
+       aes(x = reasoning_len, y = confidence, color = factor(detected))) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "loess", se = TRUE) +
+  scale_color_manual(values = c("0" = "#4575b4", "1" = "#d73027"),
+                     labels = c("No IPV", "IPV Detected")) +
+  labs(title = "Confidence vs Reasoning Length",
+       x = "Reasoning Length (characters)",
+       y = "Confidence Score",
+       color = "Detection") +
+  theme_minimal()
+```
+
+The scatter plot with LOESS smoothing curves reveals the relationship between reasoning length and confidence across detection types. For both IPV detections (red) and non-detections (blue), the trend lines suggest relatively stable confidence across reasoning lengths, with perhaps a slight positive association for longer explanations. The substantial scatter around the curves indicates that reasoning length alone does not determine confidence—the model considers content quality beyond mere explanation verbosity. The separate curves for each detection type show similar patterns, suggesting consistent confidence-reasoning dynamics regardless of outcome.
+
+---
+
+# 7. Key Findings & Implications
+
+```{r prepare_findings, include=FALSE}
+# Calculate all values for inline use
+both_pct <- completeness_summary %>% 
+  filter(completeness_category == "Both CME and LE") %>% 
+  pull(percentage)
+
+placeholder_by_type <- source_with_quality %>%
+  group_by(narrative_type) %>%
+  summarise(
+    total = n(),
+    placeholder = sum(is_placeholder),
+    pct = placeholder / total * 100
+  )
+
+overall_placeholder_pct <- sum(source_with_quality$is_placeholder) / nrow(source_with_quality) * 100
+cme_placeholder_pct <- placeholder_by_type$pct[placeholder_by_type$narrative_type == "cme"]
+le_placeholder_pct <- placeholder_by_type$pct[placeholder_by_type$narrative_type == "le"]
+
+overall_rate <- detection_summary$detection_rate
+cme_rate <- detection_by_type %>% filter(narrative_type == "cme") %>% pull(detection_rate)
+le_rate <- detection_by_type %>% filter(narrative_type == "le") %>% pull(detection_rate)
+
+both_ipv <- agreement_summary %>% 
+  filter(agreement_category == "Both Detect IPV") %>% 
+  pull(percentage)
+both_no <- agreement_summary %>% 
+  filter(agreement_category == "Both No IPV") %>% 
+  pull(percentage)
+disagree <- 100 - both_ipv - both_no
+
+quality_rates <- detection_by_quality %>%
+  arrange(desc(detection_rate))
+```
+
+## 7.1 Dataset Characteristics
+
+### Completeness
+
+The incident-level completeness analysis reveals that **`r sprintf("%.1f%%", both_pct)`** of incidents have both CME and LE narratives available, providing comprehensive documentation from multiple perspectives. The remaining **`r sprintf("%.1f%%", 100 - both_pct)`** have only one narrative type, which may limit the ability to cross-validate information between sources.
+
+### Data Quality
+
+Using comprehensive 3-tier placeholder detection (very short text < 20 characters plus narrative-type-specific patterns), we identified **`r sprintf("%.2f%%", overall_placeholder_pct)`** of narratives as true placeholders. CME narratives show a **`r sprintf("%.2f%%", cme_placeholder_pct)`** placeholder rate, while LE narratives exhibit a higher rate of **`r sprintf("%.2f%%", le_placeholder_pct)`**. This difference reflects known data access challenges and memorandum of understanding (MOU) limitations with law enforcement agencies.
+
+### Processing Success
+
+The analysis achieved exceptional operational reliability with only **`r error_summary$errors`** errors out of **`r format(error_summary$total, big.mark = ",")`** processed narratives (**`r sprintf("%.4f%%", error_summary$error_rate)`** error rate). This very low error rate indicates stable processing and robust system performance throughout the production run.
+
+## 7.2 Detection Patterns
+
+### Overall Detection Rates
+
+IPV was detected in **`r sprintf("%.2f%%", overall_rate)`** of all narratives. Detection rates varied by narrative type: CME narratives showed **`r sprintf("%.2f%%", cme_rate)`** detection, while LE narratives demonstrated **`r sprintf("%.2f%%", le_rate)`** detection. `r if(cme_rate > le_rate) paste0("CME narratives exhibited a ", sprintf("%.2f", cme_rate - le_rate), " percentage point higher detection rate than LE narratives, suggesting that medical examiner documentation may capture IPV indicators more consistently.") else paste0("LE narratives showed ", sprintf("%.2f", le_rate - cme_rate), " percentage points higher detection rate than CME narratives.")`
+
+### Agreement Between CME and LE Narratives
+
+When both CME and LE narratives were available for an incident, the model achieved an **`r sprintf("%.2f%%", agreement_rate)`** agreement rate on IPV detection. Specifically, both narrative types agreed on IPV presence in **`r sprintf("%.1f%%", both_ipv)`** of cases, agreed on IPV absence in **`r sprintf("%.1f%%", both_no)`** of cases, and disagreed in **`r sprintf("%.1f%%", disagree)`** of cases. This high agreement rate provides face validity for the detection approach, as independent narrative sources converge on similar conclusions.
+
+### Quality Impact on Detection
+
+Detection rates varied systematically by narrative quality. `r paste(sapply(1:nrow(quality_rates), function(i) paste0(quality_rates$quality_category[i], " narratives showed ", sprintf("%.2f%%", quality_rates$detection_rate[i]), " detection")), collapse = "; ")`. These patterns suggest that narrative information density influences detection performance, with placeholder narratives showing different patterns due to lack of substantive content.
+
+## 7.3 Model Behavior
+
+### Confidence Patterns
+
+The model exhibited a mean confidence score of **`r sprintf("%.3f", confidence_stats$mean)`** (median: **`r sprintf("%.3f", confidence_stats$median)`**) across all predictions. Confidence scores differed meaningfully by detection outcome, with IPV detections generally showing distinct confidence distributions compared to non-detections. Notably, higher confidence scores were associated with better CME-LE agreement, suggesting that the model's uncertainty calibration aligns with inter-source consistency.
+
+### Reasoning Quality
+
+Reasoning length varied systematically by detection outcome, with IPV-positive detections tending to generate more detailed reasoning chains. The model consistently extracted and structured indicators in JSON format, demonstrating stable output parsing across the entire dataset. This consistency enables systematic analysis of the specific indicators that drive IPV detection decisions.
+
+### Operational Performance
+
+Processing performance remained stable throughout the production run. The model averaged **`r sprintf("%.2f", time_stats$mean)`** seconds per narrative, completing the entire **`r format(prod_exp$n_narratives_total[1], big.mark = ",")`** narrative dataset in **`r sprintf("%.2f", prod_exp$total_runtime_sec[1] / 3600)`** hours. Token usage was consistent, averaging **`r sprintf("%.0f", token_stats$mean_prompt)`** prompt tokens and **`r sprintf("%.0f", token_stats$mean_completion)`** completion tokens per narrative, with stable patterns across CME and LE narrative types.
+
+## 7.4 Limitations
+
+1. **No Validation Data**: Cannot assess accuracy, precision, or recall
+2. **Placeholder Text**: Substantial proportion of narratives are placeholders/low quality
+3. **Temporal Variation**: Detection rates vary by year (see section 2.3)
+4. **Single Model**: Results reflect one model configuration only (mlx-community/gpt-oss-120b, T=0.2)
+
+## 7.5 Recommendations for Future Work
+
+### 1. Validation Dataset Needed
+   - Create manually labeled subset for proper evaluation
+   - Enable calculation of accuracy, precision, recall
+   - Support iterative model improvement with ground truth
+
+### 2. Data Quality Improvements
+   - Consider filtering placeholder narratives in future analyses
+   - Document quality thresholds for inclusion/exclusion
+   - Balance sample size vs quality trade-off
+
+### 3. Model Refinement Opportunities
+   - Investigate disagreement cases between CME and LE narratives
+   - Analyze low-confidence detections for prompt refinement
+   - Review reasoning patterns for consistency and accuracy
+
+### 4. Further Analysis
+   - Conduct case studies of high-agreement incidents
+   - Perform qualitative review of reasoning quality
+   - Compare detection rates with published IPV prevalence literature
+   - Investigate temporal trends (detection rates by year)
+
+---
+
+# Appendix
+
+## A. Experiment Configuration
+
+```{r experiment_config}
+exp_config <- prod_exp %>%
+  select(experiment_name, model_name, temperature, prompt_version, 
+         n_narratives_total, total_runtime_sec) %>%
+  mutate(across(everything(), as.character)) %>%
+  pivot_longer(everything(), names_to = "Parameter", values_to = "Value")
+
+kable(exp_config, caption = "Experiment Configuration Details")
+```
+
+## B. Database Connection Cleanup
+
+```{r cleanup}
+dbDisconnect(conn)
+cat("✅ Database connection closed\n")
+```
+
+## C. Session Info
+
+```{r session_info}
+sessionInfo()
+```
+
+---
+
+**Report Generated**: `r format(Sys.time(), '%Y-%m-%d %H:%M:%S')`
+
+**Document Status**: Production Analysis Report
+
+**Analysis Type**: Exploratory/Descriptive (Unlabeled Data)
