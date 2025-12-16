@@ -97,3 +97,9 @@ data/*.sqlite
 # Experiment logs (too large for git)
 logs/experiments/*/
 data/production_20k.db.zip
+
+# Paper rendered outputs
+paper/manuscript.html
+paper/manuscript_files/
+paper/*.docx
+paper/*.pdf
