@@ -30,7 +30,7 @@ format:
       - margin=1in
   docx:
     toc: true
-    reference-doc: custom-reference.docx  # Optional: for journal formatting
+    # reference-doc: custom-reference.docx  # Optional: for journal formatting
 bibliography: references.bib
 csl: vancouver.csl  # Or journal-specific style
 abstract: |
@@ -69,6 +69,16 @@ library(dplyr)
 library(ggplot2)
 library(knitr)
 library(kableExtra)
+
+# Helper function for cross-format table styling
+style_table <- function(kable_obj) {
+  if (knitr::is_html_output()) {
+    kable_styling(kable_obj, bootstrap_options = c("striped", "hover"))
+  } else {
+    # For Word/PDF, return plain kable without HTML styling
+    kable_obj
+  }
+}
 ```
 
 # Introduction
@@ -120,7 +130,7 @@ dataset_summary <- tibble::tribble(
 )
 
 kable(dataset_summary, caption = "Dataset Characteristics") |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  style_table()
 ```
 
 ### Ethical Considerations
@@ -176,7 +186,7 @@ prompt_performance <- tibble::tribble(
 kable(prompt_performance, 
       caption = "Top Prompt Versions by F1 Performance on Validation Set",
       digits = 3) |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  style_table()
 ```
 
 ## Validation Methodology
@@ -278,7 +288,7 @@ performance <- tibble::tribble(
 )
 
 kable(performance, caption = "Model Performance on Validation Set (v0.3.2_indicators, T=0.2)") |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  style_table()
 ```
 
 The high recall (93.3%) indicates the model successfully identifies most IPV-related narratives, while the lower precision (42.0%) reflects conservative flagging that captures borderline cases. This trade-off is appropriate for surveillance applications where missing true cases (false negatives) is more costly than manual review of flagged cases (false positives).
@@ -314,7 +324,7 @@ efficiency <- tibble::tribble(
 )
 
 kable(efficiency, caption = "Production Processing Metrics") |>
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  style_table()
 ```
 
 # Discussion
