@@ -48,6 +48,9 @@ cache/*
 # Windows files
 Thumbs.db
 
+# PDF plots
+Rplots.pdf
+
 # R environment files
 .Renviron
 .Rprofile
