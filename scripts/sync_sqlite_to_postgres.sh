@@ -33,10 +33,11 @@ if [[ ! -f "$SQLITE_DB" ]]; then
   exit 1
 fi
 
-# Use PG_CONN_STR from environment (.env file loaded above) or fallback to default
-if [[ -z "$PG_CONN_STR" ]]; then
-  echo "⚠️  PG_CONN_STR not set in .env file, using default connection" >&2
-  PG_CONN_STR="REDACTED_CONNECTION_STRING"
+# Use PG_CONN_STR from environment (.env file loaded above)
+if [[ -z "${PG_CONN_STR:-}" ]]; then
+  echo "❌ PG_CONN_STR not set. Add it to .env or set it in your environment." >&2
+  echo "   See .env.example for the expected format." >&2
+  exit 1
 fi
 FULL_REFRESH=${FULL_REFRESH:-0}
 DELETE_ORPHANS=${DELETE_ORPHANS:-0}
